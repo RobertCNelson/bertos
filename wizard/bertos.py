@@ -61,6 +61,7 @@ from BFinalPage import BFinalPage
 from BEditingDialog import BEditingDialog, BVersionDialog, BToolchainDialog
 
 import bertos_utils
+import const
 
 from LoadException import VersionException, ToolchainException
 
@@ -79,7 +80,7 @@ def newProject():
             relevant_file = relevant_files[ide]
             QProcess.startDetached(command_line, [relevant_file,])
     sys.exit()
-    
+
 def editProject(project_file):
     info_dict = {}
     while(True):
@@ -119,19 +120,20 @@ def showStartPage():
     QApplication.instance().dialog.show()
 
 def main():
-    os.chdir(os.path.dirname(os.path.abspath(sys.argv[0])))
     app = QApplication(sys.argv)
     app.settings = QSettings("Develer", "Bertos Configurator")
     app.project = BProject.BProject()
     # Development utility lines, to be removed for production
-    if not (hasattr(sys, "frozen") and sys.frozen) and newer("bertos.qrc", "bertos.rcc"):
-        os.system("rcc -binary bertos.qrc -o bertos.rcc")
-    QResource.registerResource("bertos.rcc")
+    datadir = const.DATA_DIR
+    qrc, rcc = os.path.join(datadir, 'bertos.qrc'), os.path.join(datadir, 'bertos.rcc')
+    if not (hasattr(sys, "frozen") and sys.frozen) and newer(qrc, rcc):
+        os.system("rcc -binary %s -o %s" %(qrc, rcc))
+    QResource.registerResource(rcc)
     if len(sys.argv) == 3 and sys.argv[1] == "--edit":
         editProject(sys.argv[2])
     else:
         newProject()
- 
+
 
 if __name__ == '__main__':
     main()
