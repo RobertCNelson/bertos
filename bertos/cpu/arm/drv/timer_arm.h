@@ -41,6 +41,8 @@
 
 #if CPU_ARM_AT91
 	#include "timer_at91.h"
+#elif CPU_ARM_LPC2
+	#include "timer_lpc2.h"
 /*#elif  Add other ARM families here */
 #else
 	#error Unknown CPU

@@ -42,6 +42,8 @@
 
 #if CPU_ARM_AT91
 	#include "ser_at91.h"
+#elif CPU_ARM_LPC2378
+	#include "ser_lpc2.h"
 /*#elif  Add other ARM families here */
 #else
 	#error Unknown CPU

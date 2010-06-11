@@ -33,48 +33,36 @@
  * \author Andrea Grandi <andrea@develer.com>
  *
  * \brief Tag protocol. (interface).
+ *
+ * $WIZ$ module_name = "keytag"
+ * $WIZ$ module_configuration = "bertos/cfg/cfg_keytag.h"
+ * $WIZ$ module_depends = "kfile"
+ * $WIZ$ module_hw = ""
  */
 
 #ifndef NET_KEYTAG_H
 #define NET_KEYTAG_H
 
+#include <cfg/cfg_keytag.h>
+
 #include <kern/kfile.h>
-#include <drv/ser.h>
 
-/**
- * Starting communication char (STX).
- */
-#define TAG_STX 0x02
-
-/**
- * Ending communication char (ETX).
- */
-#define TAG_ETX 0x03
-
-/**
- * Max buffer lenght
- */
-#define TAG_MAX_LEN 14
-
-
-/**
- * Max number of chars to print in the communication serial
- */
-#define TAG_MAX_PRINT_CHARS 12
 
 /**
  * Structure of a Tag packet
  */
 typedef struct TagPacket
 {
-	KFile *tag;                 ///< Tag communication channel
-	KFile *host;                ///< Host communication channel
-	bool sync;                  ///< Status flag: true if we find an STX
-	uint16_t len;               ///< Packet lenght
-	uint8_t buf[TAG_MAX_LEN];   ///< Reception buffer
+	KFile *tag;                        ///< Tag communication channel
+	KFile *host;                       ///< Host communication channel
+	bool sync;                         ///< Status flag: true if we find an STX
+	size_t len;                        ///< Packet lenght
+	uint8_t buf[CONFIG_TAG_MAX_LEN];   ///< Reception buffer
 } TagPacket;
 
 void keytag_init(struct TagPacket *pkt, struct KFile *comm, struct KFile *tag);
+int keytag_recv(struct TagPacket *pkt, uint8_t *tag, size_t len);
+
 void keytag_poll(struct TagPacket *pkt);
 
 #endif /* NET_TAG_H */

@@ -172,6 +172,7 @@
 	#define UNUSED_VAR(type,name)	__attribute__((__unused__)) type name
 	#define USED_VAR(type,name)     __attribute__((__used__)) type name
 	#define INLINE                  static inline __attribute__((__always_inline__))
+	#define NOINLINE                __attribute__((noinline))
 	#define LIKELY(x)               __builtin_expect(!!(x), 1)
 	#define UNLIKELY(x)             __builtin_expect(!!(x), 0)
 	#define PURE_FUNC               __attribute__((pure))
@@ -181,6 +182,12 @@
 	#define RESTRICT                __restrict__
 	#define MUST_CHECK              __attribute__((warn_unused_result))
 	#define PACKED                  __attribute__((packed))
+	#if CPU_ARM | CPU_CM3
+		#define NAKED		__attribute__((naked))
+	#else
+		#define NAKED
+	#endif
+
 	/**
 	 * Force compiler to realod context variable.
 	 */
@@ -188,6 +195,10 @@
 
 	#if GNUC_PREREQ(3,1)
 		#define DEPRECATED  __attribute__((__deprecated__))
+	#endif
+
+	#if GNUC_PREREQ(4,5)
+		#define UNREACHABLE() __builtin_unreachable()
 	#endif
 
 	#ifndef __cplusplus
@@ -271,6 +282,9 @@
 #ifndef INLINE
 #define INLINE                 static inline
 #endif
+#ifndef NOINLINE
+#define NOINLINE               /* nothing */
+#endif
 #ifndef NORETURN
 #define NORETURN               /* nothing */
 #endif
@@ -322,6 +336,9 @@
 #ifndef MEMORY_BARRIER
 #define MEMORY_BARRIER         /* nothing */
 #warning No memory barrier defined for select compiler. If you use the kernel check it.
+#endif
+#ifndef UNREACHABLE
+#define UNREACHABLE() for (;;)
 #endif
 
 
@@ -410,7 +427,6 @@ typedef const void * const_iptr_t;
 
 typedef unsigned char sigbit_t;  /**< Type for signal bits. */
 typedef unsigned char sigmask_t; /**< Type for signal masks. */
-typedef unsigned char page_t;    /**< Type for banked memory pages. */
 
 
 /**
@@ -441,7 +457,7 @@ typedef unsigned char page_t;    /**< Type for banked memory pages. */
 	#if CPU_X86
 		/* 32bit or 64bit (32bit for _WIN64). */
 		typedef long ssize_t;
-	#elif CPU_ARM
+	#elif CPU_ARM || CPU_CM3
 		typedef int ssize_t;
 	#elif CPU_AVR
 		/* 16bit (missing in avr-libc's sys/types.h). */

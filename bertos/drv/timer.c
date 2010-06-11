@@ -52,7 +52,7 @@
 #include <cpu/irq.h>
 #include <cpu/power.h> // cpu_relax()
 
-#include <kern/preempt.h> // proc_decQuantun()
+#include <kern/proc_p.h> // proc_decQuantun()
 
 /*
  * Include platform-specific binding code if we're hosted.
@@ -345,9 +345,6 @@ DEFINE_TIMER_ISR
 
 	TIMER_STROBE_ON;
 
-	/* Perform hw IRQ handling */
-	timer_hw_irq();
-
 	/* Update the master ms counter */
 	++_clock;
 
@@ -358,6 +355,9 @@ DEFINE_TIMER_ISR
 		timer_poll(&timers_queue);
 	#endif
 
+	/* Perform hw IRQ handling */
+	timer_hw_irq();
+	
 	TIMER_STROBE_OFF;
 }
 

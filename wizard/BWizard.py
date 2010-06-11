@@ -38,15 +38,6 @@ import copy
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 
-import BFolderPage
-import BVersionPage
-import BCpuPage
-import BToolchainPage
-import BModulePage
-import BOutputPage
-import BCreationPage
-import BFinalPage
-
 try:
     from version import wizard_version
 except ImportError:
@@ -58,7 +49,10 @@ class BWizard(QWizard):
     """
 
     def __init__(self, page_list):
+        self._current = None
         QWizard.__init__(self)
+        geometry = QApplication.instance().settings.value("geometry", QVariant()).toRect()
+        self.setGeometry(geometry)
         self.setWindowTitle(self.tr("Create a BeRTOS project - rev.%1").arg(wizard_version))
         self.setWindowIcon(QIcon(":/images/appicon.png"))
         self.setOption(QWizard.DisabledBackButtonOnLastPage, True)
@@ -69,8 +63,13 @@ class BWizard(QWizard):
         """
         Adds the pages in the wizard.
         """
-        for page in page_list:
-            self.addPage(page())
+        self._page_dict = {}
+        for i, page in enumerate(page_list):
+            self._page_dict[page] = i
+            self.setPage(i, page())
+
+    def pageIndex(self, page_class):
+        return self._page_dict[page_class]
 
     def connectSignals(self):
         """
@@ -85,10 +84,16 @@ class BWizard(QWizard):
         """
         page = self.page(pageId)
         if page:
-            page.reloadData()
+            page.reloadData(previous_id= self._current)
+        self._current = pageId
 
     def project(self):
         """
         Returns the BProject associated with the wizard.
         """
         return copy.deepcopy(QApplication.instance().project)
+
+    def done(self, result):
+        geometry = self.geometry()
+        QApplication.instance().settings.setValue("geometry", QVariant(geometry))
+        QWizard.done(self, result)

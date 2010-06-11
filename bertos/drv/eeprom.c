@@ -32,16 +32,11 @@
  *
  * \brief Driver for the 24xx16 and 24xx256 I2C EEPROMS (implementation)
  *
- *
- * \version $Id$
  * \author Stefano Fedrigo <aleph@develer.com>
  * \author Bernie Innocenti <bernie@codewiz.org>
  */
 
 #include "eeprom.h"
-
-#warning TODO:Test and complete this module for arm platform.
-#if !CPU_ARM
 
 #include <cfg/macros.h>  // MIN()
 #include <cfg/debug.h>
@@ -73,6 +68,12 @@
 static const EepromInfo mem_info[] =
 {
 	{
+		/* 24XX08 */
+		.has_dev_addr = false,
+		.blk_size = 0x10,
+		.e2_size = 0x400,
+	},
+	{
 		/* 24XX16 */
 		.has_dev_addr = false,
 		.blk_size = 0x10,
@@ -90,6 +91,13 @@ static const EepromInfo mem_info[] =
 		.blk_size = 0x80,
 		.e2_size = 0x10000,
 	},
+	{
+		/* 24XX1024 */
+		.has_dev_addr = true,
+		.blk_size = 0x100,
+		.e2_size = 0x20000,
+	},
+
 	/* Add other memories here */
 };
 
@@ -113,7 +121,7 @@ static size_t eeprom_writeRaw(struct KFile *_fd, const void *buf, size_t size)
 	STATIC_ASSERT(countof(addr_buf) <= sizeof(e2addr_t));
 
 	/* clamp size to memory limit (otherwise may roll back) */
-	ASSERT(_fd->seek_pos + size <= (kfile_off_t)_fd->size);
+	ASSERT(_fd->seek_pos + (kfile_off_t)size <= (kfile_off_t)_fd->size);
 	size = MIN((kfile_off_t)size, _fd->size - _fd->seek_pos);
 
 	if (mem_info[fd->type].has_dev_addr)
@@ -213,7 +221,7 @@ static size_t eeprom_read(struct KFile *_fd, void *_buf, size_t size)
 	STATIC_ASSERT(countof(addr_buf) <= sizeof(e2addr_t));
 
 	/* clamp size to memory limit (otherwise may roll back) */
-	ASSERT(_fd->seek_pos + size <= (kfile_off_t)_fd->size);
+	ASSERT(_fd->seek_pos + (kfile_off_t)size <= (kfile_off_t)_fd->size);
 	size = MIN((kfile_off_t)size, _fd->size - _fd->seek_pos);
 
 	e2dev_addr_t dev_addr;
@@ -256,6 +264,7 @@ static size_t eeprom_read(struct KFile *_fd, void *_buf, size_t size)
 		rd_len++;
 	}
 
+	i2c_stop();
 	return rd_len;
 }
 
@@ -388,5 +397,3 @@ void eeprom_init(Eeprom *fd, EepromType type, e2dev_addr_t addr, bool verify)
 
 	fd->fd.seek = kfile_genericSeek;
 }
-
-#endif

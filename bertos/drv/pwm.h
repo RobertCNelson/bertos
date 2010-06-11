@@ -29,18 +29,16 @@
  * Copyright 2005 Develer S.r.l. (http://www.develer.com/)
  * -->
  *
- * \version $Id$
  *
  * \brief Pulse Width Modulation (PWM) driver.
  *
- * \version $Id$
  * \author Francesco Sacchi <batt@develer.com>
  * \author Daniele Basile <asterix@develer.com>
  *
  * $WIZ$ module_name = "pwm"
  * $WIZ$ module_configuration = "bertos/cfg/cfg_pwm.h"
  * $WIZ$ module_hw = "bertos/hw/pwm_map.h"
- * $WIZ$ module_supports = "not avr"
+ * $WIZ$ module_supports = "not avr and not cm3"
  */
 
 #ifndef DRV_PWM_H
@@ -76,6 +74,7 @@ INLINE void pwm_setPolarity(PwmDev dev, bool pol)
 
 void pwm_setDuty(PwmDev dev, pwm_duty_t duty);
 void pwm_setFrequency(PwmDev dev, pwm_freq_t freq);
+void pwm_setPolarity(PwmDev dev, bool pol);
 void pwm_enable(PwmDev dev, bool state);
 void pwm_init(void);
 

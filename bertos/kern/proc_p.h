@@ -50,6 +50,7 @@
 
 #include <kern/proc.h>   // struct Process
 
+#ifndef asm_switch_context
 /**
  * CPU dependent context switching routines.
  *
@@ -57,23 +58,7 @@
  * support routine which usually needs to be written in assembly.
  */
 EXTERN_C void asm_switch_context(cpu_stack_t **new_sp, cpu_stack_t **save_sp);
-
-/*
- * Save context of old process and switch to new process.
-  */
-INLINE void proc_switchTo(Process *next, Process *prev)
-{
-	cpu_stack_t *dummy;
-
-	if (UNLIKELY(next == prev))
-		return;
-	/*
-	 * If there is no old process, we save the old stack pointer into a
-	 * dummy variable that we ignore.  In fact, this happens only when the
-	 * old process has just exited.
-	 */
-	asm_switch_context(&next->stack, prev ? &prev->stack : &dummy);
-}
+#endif
 
 /**
  * \name Flags for Process.flags.
@@ -176,11 +161,8 @@ void proc_entry(void);
 /* Schedule another process *without* adding the current one to the ready list. */
 void proc_switch(void);
 
-/* Low level scheduling routine. */
-void proc_schedule(void);
-
-/* Low level context switch routine. */
-void proc_switchTo(Process *next, Process *prev);
+/* Immediately schedule a particular process bypassing the scheduler. */
+void proc_wakeup(Process *proc);
 
 /* Initialize a scheduler class. */
 void proc_schedInit(void);
@@ -198,5 +180,44 @@ void proc_schedInit(void);
 	/** Rename a process */
 	void monitor_rename(Process *proc, const char *name);
 #endif /* CONFIG_KERN_MONITOR */
+
+/*
+ * Quantum related macros are used in the
+ * timer module and must be empty when
+ * kernel is disabled.
+ */
+#if (CONFIG_KERN && CONFIG_KERN_PREEMPT)
+INLINE int preempt_quantum(void)
+{
+	extern int _proc_quantum;
+	return _proc_quantum;
+}
+
+INLINE void proc_decQuantum(void)
+{
+	extern int _proc_quantum;
+	if (_proc_quantum > 0)
+		_proc_quantum--;
+}
+
+INLINE void preempt_reset_quantum(void)
+{
+	extern int _proc_quantum;
+	_proc_quantum = CONFIG_KERN_QUANTUM;
+}
+#else /* !(CONFIG_KERN && CONFIG_KERN_PREEMPT) */
+INLINE int preempt_quantum(void)
+{
+	return 0;
+}
+
+INLINE void proc_decQuantum(void)
+{
+}
+
+INLINE void preempt_reset_quantum(void)
+{
+}
+#endif /* (CONFIG_KERN && CONFIG_KERN_PREEMPT) */
 
 #endif /* KERN_PROC_P_H */

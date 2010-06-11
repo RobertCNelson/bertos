@@ -42,32 +42,32 @@ from PyQt4.QtGui import *
 
 import exception_handler
 
-import BProject
+from BProject import BProject
 
-import BStartPage
-import BWizard
+from BWizard import BWizard
 
 from BIntroPage import BIntroPage
 from BFolderPage import BFolderPage
+from BBoardPage import BBoardPage
+from BProjectPresets import BProjectPresets
 from BOpenPage import BOpenPage
 from BVersionPage import BVersionPage
 from BCpuPage import BCpuPage
 from BToolchainPage import BToolchainPage
 from BModulePage import BModulePage
-from BOutputPage import BOutputPage
 from BCreationPage import BCreationPage
 from BFinalPage import BFinalPage
 
 from BEditingDialog import BEditingDialog, BVersionDialog, BToolchainDialog
 
-import bertos_utils
-import const
+from const import DATA_DIR
 
 from LoadException import VersionException, ToolchainException
 
 def newProject():
-    page_list = [BIntroPage, BFolderPage, BVersionPage, BCpuPage, BToolchainPage, BModulePage, BOutputPage, BCreationPage, BFinalPage]
-    wizard = BWizard.BWizard(page_list)
+    QApplication.instance().project = BProject()
+    page_list = [BIntroPage, BFolderPage, BVersionPage, BBoardPage, BProjectPresets, BCpuPage, BToolchainPage, BModulePage, BCreationPage, BFinalPage]
+    wizard = BWizard(page_list)
     wizard.show()
     wizard.exec_()
     project = QApplication.instance().project
@@ -84,24 +84,26 @@ def newProject():
 def editProject(project_file):
     info_dict = {}
     while(True):
+        # Empty project is the default fallback.
+        QApplication.instance().project = BProject()
         try:
-            QApplication.instance().project = bertos_utils.loadBertosProject(project_file, info_dict)
+            QApplication.instance().project = BProject(project_file, info_dict)
         except VersionException:
             QMessageBox.critical(
                 None,
                 QObject().tr("BeRTOS version not found!"),
-                QObject().tr("The selected BeRTOS version is not found, please select an existing one...")
+                QObject().tr("The selected BeRTOS version was not found, please select another one...")
             )
             dialog = BVersionDialog()
             if dialog.exec_():
                 version = dialog.version_page.currentVersion()
-                info_dict["SOURCES_PATH"] = version
+                info_dict["BERTOS_PATH"] = version
             continue
         except ToolchainException, exc:
             QMessageBox.critical(
                 None,
                 QObject().tr("Toolchain not found!"),
-                QObject().tr("The selected toolchain is not found, please select an existing one...")
+                QObject().tr("The selected toolchain was not found, please select another one...")
             )
             QApplication.instance().project = exc.partial_project
             dialog = BToolchainDialog()
@@ -113,24 +115,17 @@ def editProject(project_file):
     dialog = BEditingDialog()
     dialog.exec_()
 
-def showStartPage():
-    QApplication.instance().dialog = BStartPage.BStartPage()
-    QApplication.instance().connect(QApplication.instance().dialog, SIGNAL("newProject"), newProject)
-    QApplication.instance().connect(QApplication.instance().dialog, SIGNAL("editProject"), editProject)
-    QApplication.instance().dialog.show()
-
 def main():
     app = QApplication(sys.argv)
     app.settings = QSettings("Develer", "Bertos Configurator")
-    app.project = BProject.BProject()
     # Development utility lines, to be removed for production
-    datadir = const.DATA_DIR
+    datadir = DATA_DIR
     qrc, rcc = os.path.join(datadir, 'bertos.qrc'), os.path.join(datadir, 'bertos.rcc')
     if not (hasattr(sys, "frozen") and sys.frozen) and newer(qrc, rcc):
         os.system("rcc -binary %s -o %s" %(qrc, rcc))
     QResource.registerResource(rcc)
     if len(sys.argv) == 3 and sys.argv[1] == "--edit":
-        editProject(sys.argv[2])
+        editProject(os.path.abspath(sys.argv[2]))
     else:
         newProject()
 

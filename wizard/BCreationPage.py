@@ -46,18 +46,24 @@ class BCreationPage(BWizardPage):
     
     def __init__(self):
         BWizardPage.__init__(self, UI_LOCATION + "/project_creation.ui")
-        self.setTitle(self.tr("Settings summary"))
+	self.setTitle(self.tr("Project summary"))
+	self.setSubTitle(self.tr("Your project is ready to be created. Review your selections and press the \"Create\" button"))
         self._completed = False
 
     ## Overloaded BWizardPage methods ##
+
+    def connectSignals(self):
+        self.connect(self.pageContent.codeliteCheckBox, SIGNAL("stateChanged(int)"), self.codelitePluginChanged)
     
     def setupUi(self):
         summary = self.pageContent.summaryTree
         summary.setHeaderHidden(True)
         summary.setColumnCount(1)
+        self.pageContent.codeliteCheckBox.setChecked("codelite" not in self.plugins())
+        self.codelitePluginChanged()
         self.setButtonText(QWizard.NextButton, self.tr("Create"))
     
-    def reloadData(self):
+    def reloadData(self, previous_id=None):
         self.setupUi()
         self.pageContent.summaryTree.clear()
         top_level = []
@@ -65,7 +71,7 @@ class BCreationPage(BWizardPage):
         folder_item = QTreeWidgetItem(folder_title, QStringList([os.path.normpath(self.projectInfo("PROJECT_PATH"))]))
         top_level.append(folder_title)
         version_title = QTreeWidgetItem(QStringList([self.tr("BeRTOS version")]))
-        sources_path = self.projectInfo("SOURCES_PATH")
+        sources_path = self.projectInfo("BERTOS_PATH")
         version = QTreeWidgetItem(version_title, QStringList([self.tr("version: ") + bertos_utils.bertosVersion(sources_path)]))
         source_path = QTreeWidgetItem(version_title, QStringList([self.tr("path: ") + os.path.normpath(sources_path)]))
         top_level.append(version_title)
@@ -86,7 +92,7 @@ class BCreationPage(BWizardPage):
             toolchain_target = QTreeWidgetItem(toolchain_title, QStringList([version]))
         toolchain_path = QTreeWidgetItem(toolchain_title, QStringList([self.tr("path: " + os.path.normpath(toolchain_info["path"]))]))
         top_level.append(toolchain_title)
-        module_title = QTreeWidgetItem(QStringList([self.tr("Modules")]))
+        module_title = QTreeWidgetItem(QStringList([self.tr("Selected modules")]))
         configurations = self.projectInfo("CONFIGURATIONS")
         module_categories = {}
         for module, information in self.projectInfo("MODULES").items():
@@ -110,4 +116,15 @@ class BCreationPage(BWizardPage):
         for item in top_level:
             self.pageContent.summaryTree.expandItem(item)
     
+    ####
+
+    ## Slots ##
+
+    def codelitePluginChanged(self):
+        if not self.pageContent.codeliteCheckBox.isChecked():
+            output = ["codelite"]
+        else:
+            output= []
+        self.setProjectInfo("OUTPUT", output)
+
     ####

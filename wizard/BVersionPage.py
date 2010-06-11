@@ -48,10 +48,11 @@ class BVersionPage(BWizardPage):
     to use. This page show some pieces of information about the version.
     """
     
-    def __init__(self):
+    def __init__(self, edit=False):
+        self._edit = edit
         BWizardPage.__init__(self, UI_LOCATION + "/bertos_versions.ui")
-        self.setTitle(self.tr("Select the BeRTOS directory"))
-        self.setSubTitle(self.tr("The project created will be based on the BeRTOS version found"))
+        self.setTitle(self.tr("Select BeRTOS version"))
+        self.setSubTitle(self.tr("Your project will be created with the specified BeRTOS version"))
 
     ## Overloaded QWizardPage methods ##
     
@@ -64,7 +65,7 @@ class BVersionPage(BWizardPage):
             # Remove the trailing slash
             if sources_path.endswith(os.sep):
                 sources_path = sources_path[:-1]
-            self.setProjectInfo("SOURCES_PATH", sources_path)
+            self.setProjectInfo("BERTOS_PATH", sources_path)
             return True
         else:
             return False
@@ -77,13 +78,13 @@ class BVersionPage(BWizardPage):
         """
         Overload of the BWizardPage connectSignals method.
         """
-        self.connect(self.pageContent.versionList, SIGNAL("itemSelectionChanged()"), self.rowChanged)
+        self.connect(self.pageContent.versionList, SIGNAL("currentItemChanged(QListWidgetItem *, QListWidgetItem*)"), self.rowChanged)
         self.connect(self.pageContent.addButton, SIGNAL("clicked()"), self.addVersion)
         self.connect(self.pageContent.removeButton, SIGNAL("clicked()"), self.removeVersion)
         # Fake signal connection for the update button
         self.connect(self.pageContent.updateButton, SIGNAL("clicked()"), self.updateClicked)
     
-    def reloadData(self):
+    def reloadData(self, previous_id=None):
         """
         Overload of the BWizardPage reloadData method.
         """
@@ -187,7 +188,7 @@ class BVersionPage(BWizardPage):
             import winreg_importer
             versions |= set([os.path.normpath(dir) for dir in winreg_importer.getBertosDirs()])
         versions |= set([os.path.normpath(dir) for dir in self.versions()])
-        selected = self.projectInfo("SOURCES_PATH")
+        selected = self.projectInfo("BERTOS_PATH")
         for directory in versions:
             item = self.insertListElement(directory)
             if selected and selected == directory:

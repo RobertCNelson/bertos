@@ -121,7 +121,7 @@ void pwm_hw_setFrequency(PwmDev dev, uint32_t freq)
 	for(int i = 0; i <= PWM_HW_MAX_PRESCALER_STEP; i++)
 	{
 		period = CPU_FREQ / (BV(i) * freq);
-// 		LOG_INFO("period[%ld], prescale[%d]\n", period, i);
+ 		LOG_INFO("period[%ld], prescale[%d]\n", period, i);
 		if ((period < PWM_HW_MAX_PERIOD) && (period != 0))
 		{
 			//Clean previous channel prescaler, and set new
@@ -147,33 +147,35 @@ void pwm_hw_setDutyUnlock(PwmDev dev, uint16_t duty)
 
 
 	/*
+	 * If polarity flag is true we must invert
+	 * PWM polarity.
+	 */
+	if (pwm_map[dev].pol)
+	{
+		duty = (uint16_t)*pwm_map[dev].period_reg - duty;
+		LOG_INFO("Inverted duty[%d], pol[%d]\n", duty, pwm_map[dev].pol);
+	}
+
+	/*
 	 * WARNING: is forbidden to write 0 to duty cycle value,
 	 * and so for duty = 0 we must enable PIO and clear output!
 	 */
 	if (!duty)
 	{
-		PWM_PIO_PER = pwm_map[dev].pwm_pin;
+		PWM_PIO_CODR = pwm_map[dev].pwm_pin;
+		PWM_PIO_PER  = pwm_map[dev].pwm_pin;
 		pwm_map[dev].duty_zero = true;
 	}
 	else
 	{
-	/*
-         * If polarity flag is true we must invert
-         * PWM polarity.
-         */
-        if (pwm_map[dev].pol)
-        {
-                duty = (uint16_t)*pwm_map[dev].period_reg - duty;
-				LOG_INFO("Inverted duty[%d], pol[%d]\n", duty, pwm_map[dev].pol);
-        }
-
 		PWM_PIO_PDR = pwm_map[dev].pwm_pin;
+		PWM_PIO_ABSR = pwm_map[dev].pwm_pin;
+
 		*pwm_map[dev].update_reg = duty;
 		pwm_map[dev].duty_zero = false;
 	}
 
 	PWM_ENA = BV(dev);
-
 	LOG_INFO("PWM ch[%d] duty[%d], period[%ld]\n", dev, duty, *pwm_map[dev].period_reg);
 }
 
@@ -184,7 +186,10 @@ void pwm_hw_setDutyUnlock(PwmDev dev, uint16_t duty)
 void pwm_hw_enable(PwmDev dev)
 {
 	if (!pwm_map[dev].duty_zero)
-		PWM_PIO_PDR = pwm_map[dev].pwm_pin;
+	{
+		PWM_PIO_PDR  = pwm_map[dev].pwm_pin;
+		PWM_PIO_ABSR = pwm_map[dev].pwm_pin;
+	}
 }
 
 /**
@@ -220,8 +225,8 @@ void pwm_hw_init(void)
 	 * - Power on PWM
 	 */
 	PWM_PIO_CODR = BV(PWM0) | BV(PWM1) | BV(PWM2) | BV(PWM3);
-	PWM_PIO_OER = BV(PWM0) | BV(PWM1) | BV(PWM2) | BV(PWM3);
-	PWM_PIO_PDR = BV(PWM0) | BV(PWM1) | BV(PWM2) | BV(PWM3);
+	PWM_PIO_OER  = BV(PWM0) | BV(PWM1) | BV(PWM2) | BV(PWM3);
+	PWM_PIO_PDR  = BV(PWM0) | BV(PWM1) | BV(PWM2) | BV(PWM3);
 	PWM_PIO_ABSR = BV(PWM0) | BV(PWM1) | BV(PWM2) | BV(PWM3);
 	PMC_PCER |= BV(PWMC_ID);
 

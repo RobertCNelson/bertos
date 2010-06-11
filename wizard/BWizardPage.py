@@ -85,6 +85,7 @@ class BWizardPage(QWizardPage):
         """
         return QApplication.instance().project.info(key)
     
+    @property
     def project(self):
         """
         Returns the BProject instance.
@@ -107,6 +108,18 @@ class BWizardPage(QWizardPage):
         Value is a QVariant and neet to be converted in a standard type.
         """
         return QApplication.instance().settings.value(QString(key), QVariant())
+
+    def plugins(self):
+        """
+        Returns the list of actived plugins.
+        """
+        return qvariant_converter.getStringList(self.settingsRetrieve("plugins"))
+
+    def setPlugins(self, plugins):
+        """
+        Stores the given list of actived plugins.
+        """
+        self.settingsStore("plugins", qvariant_converter.convertStringList(plugins))
     
     def versions(self):
         """
@@ -172,7 +185,7 @@ class BWizardPage(QWizardPage):
     
     ## Methodo to be implemented in child classes when needed ##
     
-    def reloadData(self):
+    def reloadData(self, previous_id=None):
         """
         Method called before the page is loaded. The pages that need to use this
         method have to implement it.

@@ -32,43 +32,36 @@
  *
  * \brief Configuration file for GFX module.
  *
- * \version $Id$
- *
  * \author Daniele Basile <asterix@develer.com>
  */
 
 #ifndef CFG_GFX_H
 #define CFG_GFX_H
 
-/// Enable line clipping algorithm.
+/**
+ * Enable line clipping algorithm.
+ * $WIZ$ type = "boolean"
+ */
 #define CONFIG_GFX_CLIPPING  1
 
-/// Enable text rendering in bitmaps.
+/**
+ * Enable text rendering in bitmaps.
+ * $WIZ$ type = "boolean"
+ */
 #define CONFIG_GFX_TEXT  1
 
-/// Enable virtual coordinate system.
+/**
+ * Enable virtual coordinate system.
+ * $WIZ$ type = "boolean"
+ */
 #define CONFIG_GFX_VCOORDS  1
 
-/// Select bitmap pixel format.
-#define CONFIG_BITMAP_FMT  BITMAP_FMT_PLANAR_V_LSB
-
 /**
- * \name Type for the chart dataset
- * \{
+ * Select bitmap pixel format.
+ * $WIZ$ type = "enum"
+ * $WIZ$ value_list = "bitmap_format"
  */
-#define CONFIG_CHART_TYPE_X uint8_t
-#define CONFIG_CHART_TYPE_Y uint8_t
-/*\}*/
-
-
-/// Enable button bar behind menus
-#define CONFIG_MENU_MENUBAR        0
-#define CONFIG_LEVELEDIT_TIMEOUT   0
-#define CONFIG_MENU_TIMEOUT        0
-
-/// Enable smooth scrolling in menus
-#define CONFIG_MENU_SMOOTH  0
-
+#define CONFIG_BITMAP_FMT  BITMAP_FMT_PLANAR_V_LSB
 
 #endif /* CFG_GFX_H */
 

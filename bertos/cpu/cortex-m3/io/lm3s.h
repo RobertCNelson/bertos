@@ -26,26 +26,29 @@
  * invalidate any other reasons why the executable file might be covered by
  * the GNU General Public License.
  *
- * Copyright 2007 Develer S.r.l. (http://www.develer.com/)
+ * Copyright 2010 Develer S.r.l. (http://www.develer.com/)
  *
  * -->
  *
- * \version $Id$
- *
- * \author Manuele Fanelli <qwert@develer.com>
- *
- * Luminary Micro Stellaris LM3S common definitions.
- * This file is based on NUT/OS implementation. See license below.
+ * \author Andrea Righi <arighi@develer.com>
  */
 
 #ifndef LM3S_H
 #define LM3S_H
 
 #include <cpu/detect.h>
+#include <cfg/compiler.h>
 
-#if CPU_ARM_LM3S1968
+#if (CPU_CM3_LM3S1968 ||  CPU_CM3_LM3S8962)
 	#include "lm3s1968.h"
-
+	#include "lm3s_types.h"
+	#include "lm3s_ints.h"
+	#include "lm3s_nvic.h"
+	#include "lm3s_sysctl.h"
+	#include "lm3s_gpio.h"
+	#include "lm3s_memmap.h"
+	#include "lm3s_uart.h"
+	#include "lm3s_ssi.h"
 #else
 	#error Missing I/O definitions for CPU.
 #endif

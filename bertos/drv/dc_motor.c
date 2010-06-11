@@ -34,8 +34,12 @@
  *
  * Thi module provide a simple api to controll a DC motor in direction and
  * speed, to allow this we use a  Back-EMF technique.
- *
- * TODO: write a brief..
+ * This technique is based, on the capability of the DC motor to become a generator
+ * of voltage when we turn off its supply. This happen every time we turn off the
+ * DC motor supply, and it continues to rotate for a short time thanks to its mechanical
+ * energy. Using this idea we can turn off the motor for a very short time, and
+ * we read the volage value from DC motor supply pins. This voltage say to us
+ * the actual speed of the motor.
  *
  * \author Daniele Basile <asterix@develer.com>
  */
@@ -45,7 +49,7 @@
 
 // Define logging setting (for cfg/log.h module).
 #define LOG_LEVEL         DC_MOTOR_LOG_LEVEL
-#define LOG_VERBOSITY     DC_MOTOR_LOG_FORMAT
+#define LOG_FORMAT        DC_MOTOR_LOG_FORMAT
 
 #include <cfg/log.h>
 #include <cfg/debug.h>
@@ -53,75 +57,125 @@
 #include <algo/pid_control.h>
 
 #include <drv/timer.h>
-#include <drv/adc.h>
 
 #include <kern/proc.h>
 
+#include <cpu/power.h>
+
 #include <string.h>
+
+/**
+ * Define status bit for DC motor device.
+ */
+#define DC_MOTOR_ACTIVE           BV(0)     ///< DC motor enable or disable flag.
+#define DC_MOTOR_DIR              BV(1)     ///< Spin direction of DC motor.
+
+/*
+ * Some utility macro for motor directions
+ */
+#define POS_DIR                   1
+#define NEG_DIR                   0
+#define DC_MOTOR_POS_DIR(x)       ((x) |= DC_MOTOR_DIR)   // Set directions status positive
+#define DC_MOTOR_NEG_DIR(x)       ((x) &= ~DC_MOTOR_DIR)  // Set directions status negative
+
+// Update the status with current direction
+#define DC_MOTOR_SET_STATUS_DIR(status, dir) \
+		(dir == POS_DIR ? DC_MOTOR_POS_DIR(status) : DC_MOTOR_NEG_DIR(status))
+
+#if (CONFIG_KERN && CONFIG_KERN_PREEMPT)
+	#if CONFIG_DC_MOTOR_USE_SEM
+		#include <kern/sem.h>
+
+		Semaphore dc_motor_sem;
+		#define DC_MOTOR_LOCK        sem_obtain(&dc_motor_sem)
+		#define DC_MOTOR_UNLOCK      sem_release(&dc_motor_sem)
+	#else
+		#define DC_MOTOR_LOCK        proc_forbid()
+		#define DC_MOTOR_UNLOCK      proc_permit()
+	#endif
+#else
+	#define DC_MOTOR_LOCK        /* None */
+	#define DC_MOTOR_UNLOCK      /* None */
+#endif
 
 /**
  * DC motor definition.
  */
 static DCMotor dcm_all[CONFIG_NUM_DC_MOTOR];
 
-/// Stack process for DC motor poll.
-static cpu_stack_t dc_motor_poll_stack[1024];
+/*
+ * Process to poll dc motor status
+ */
+struct Process *dc_motor;
 
-///< Sample period for all DC motor.
-static mtime_t sample_period;
+
+// Stack process for DC motor poll.
+static PROC_DEFINE_STACK(dc_motor_poll_stack, 500);
 
 // Only for Debug
 LOG_INFOB(static int debug_msg_delay = 0;);
 
-//Forward declaration
-static void dc_motor_do(int index);
+
+INLINE dc_speed_t dc_motor_readSpeed(int index)
+{
+	DCMotor *dcm = &dcm_all[index];
+	return HW_DC_MOTOR_READ_VALUE(dcm->cfg->adc_ch, dcm->cfg->adc_min, dcm->cfg->adc_max);
+}
 
 /**
- * Process to poll DC motor status.
- * To use a Back-EMF technique (see brief for more details),
- * we turn off a motor for max_sample_delay, that value are stored
- * in each DC motor config. For this implementation we assume
- * that have a common max_sample_delay, choose among a max delay
- * to all DC motor configuration.
- * The DC motor off time is choose to allow the out signal to
- * be stable, so we can read and process this value for feedback
- * controll loop.
- * The period (sample_period - max_sample_delay) that every time
- * we turn off a DC motor is choose to have a feedback controll
- * more responsive or less responsive.
+ * Read the target speed from select device.
  */
-static void NORETURN dc_motor_poll(void)
+dc_speed_t dc_motor_readTargetSpeed(int index)
 {
-	for (;;)
+	DCMotor *dcm = &dcm_all[index];
+	return HW_DC_MOTOR_READ_VALUE(dcm->cfg->speed_dev_id, CONFIG_DC_MOTOR_MIN_SPEED, CONFIG_DC_MOTOR_MAX_SPEED);
+}
+
+static void dc_motor_start(int index)
+{
+	DCMotor *dcm = &dcm_all[index];
+
+	DC_MOTOR_LOCK;
+	/*
+	 * Clean all PID stutus variable, becouse
+	 * we start with new one.
+	 */
+	pid_control_reset(&dcm->pid_ctx);
+	dcm->status |= DC_MOTOR_ACTIVE;
+	DC_MOTOR_UNLOCK;
+}
+
+/*
+ * There are two \a mode to stop the dc motor:
+ *  - DC_MOTOR_DISABLE_MODE
+ *  - DC_MOTOR_IDLE
+ *
+ * The DC_MOTOR_DISABLE_MODE shut down the DC motor and
+ * leave it floating to rotate.
+ * The DC_MOTOR_IDLE does not shut down DC motor, but put
+ * its supply pin in short circuite, in this way the motor result
+ * braked from intentional rotation.
+ */
+static void dc_motor_stop(int index)
+{
+	DCMotor *dcm = &dcm_all[index];
+
+	DC_MOTOR_LOCK;
+
+	dcm->status &= ~DC_MOTOR_ACTIVE;
+	dcm->expire_time = DC_MOTOR_NO_EXPIRE;
+	pwm_enable(dcm->cfg->pwm_dev, false);
+
+	if (dcm->cfg->braked)
 	{
-		mtime_t max_sample_delay = 0;
-		int i;
-
-		/*
-		 * For all DC motor we read and process output singal,
-		 * and choose the max value to off time
-		 */
-		for (i = 0; i < CONFIG_NUM_DC_MOTOR; i++)
-		{
-			dc_motor_do(i);
-			max_sample_delay = MAX(max_sample_delay, dcm_all[i].cfg->sample_delay);
-		}
-
-		//Wait for next sampling
-		timer_delay(sample_period - max_sample_delay);
-
-		for (i = 0; i < CONFIG_NUM_DC_MOTOR; i++)
-		{
-			if (dcm_all[i].status & DC_MOTOR_ACTIVE)
-			{
-				DC_MOTOR_DISABLE(dcm_all[i].index);
-				pwm_enable(dcm_all[i].cfg->pwm_dev, false);
-			}
-		}
-
-		//Wait some time to allow signal to stabilize before sampling
-		timer_delay(max_sample_delay);
+		DC_MOTOR_STOP_BRAKED(dcm->index);
 	}
+	else
+	{
+		DC_MOTOR_STOP_FLOAT(dcm->index);
+	}
+
+	DC_MOTOR_UNLOCK;
 }
 
 /*
@@ -132,38 +186,143 @@ static void dc_motor_do(int index)
 {
 	DCMotor *dcm = &dcm_all[index];
 
-	dc_speed_t curr_pos;
-	pwm_duty_t new_pid;
+	dc_speed_t curr_pos = 0;
+	pwm_duty_t new_pid = 0;
+
+	DC_MOTOR_LOCK;
 
 	//If select DC motor is not active we return
 	if (!(dcm->status & DC_MOTOR_ACTIVE))
+	{
+		DC_MOTOR_UNLOCK;
 		return;
+	}
 
-	//Acquire the output signal
-	curr_pos = ADC_RANGECONV(adc_read(dcm->cfg->adc_ch), dcm->cfg->adc_min, dcm->cfg->adc_max);
+	/*
+	 * To set dc motor direction we must also set the
+	 * PWM polarity according with dc motor driver chip
+	 */
+	pwm_setPolarity(dcm->cfg->pwm_dev, dcm->status & DC_MOTOR_DIR);
+	DC_MOTOR_SET_DIR(dcm->index, dcm->status & DC_MOTOR_DIR);
 
 	//Compute next value for reaching target speed from current position
-	new_pid = pid_control_update(&dcm->pid_ctx, dcm->tgt_speed, curr_pos);
+	if (dcm->cfg->pid_enable)
+	{
+		/*
+		 * Here we cannot disable the switch context because the
+		 * driver, that read the speed could be need to use signal or
+		 * other thing that needs the kernel switch context, for this
+		 * reason we unlock before to read the speed.
+		 */
+		DC_MOTOR_UNLOCK;
+		curr_pos = dc_motor_readSpeed(index);
+		DC_MOTOR_LOCK;
+		new_pid = pid_control_update(&dcm->pid_ctx, dcm->tgt_speed, curr_pos);
+	}
+	else
+	{
+		new_pid = dcm->tgt_speed;
+	}
 
+	LOG_INFOB(
+		if (debug_msg_delay == 20)
+		{
+			LOG_INFO("DC Motor[%d]: curr_speed[%d],curr_pos[%d],tgt[%d]\n", dcm->index,
+								curr_pos, new_pid, dcm->tgt_speed);
+			debug_msg_delay = 0;
+		}
+		debug_msg_delay++;
+	);
 
- 	LOG_INFOB(if (debug_msg_delay == 20)
- 	{
- 		LOG_INFO("DCmt[%d]>curr_speed[%d],tgt[%d]\n", dcm->index, curr_pos, dcm->tgt_speed);
- 		LOG_INFO("%d,", curr_pos);
- 		debug_msg_delay = 0;
- 	}
- 	debug_msg_delay++;
-	kputs("\n"););
-
- 	LOG_WARN("tg[%d], new_pid[%d], pos[%d]\n", dcm->tgt_speed, new_pid, curr_pos);
-
- 	//Apply the compute duty value
+	//Apply the compute duty value
 	pwm_setDuty(dcm->cfg->pwm_dev, new_pid);
 
 	//Restart dc motor
 	pwm_enable(dcm->cfg->pwm_dev, true);
 
 	DC_MOTOR_ENABLE(dcm->index);
+	DC_MOTOR_UNLOCK;
+}
+
+
+/*
+ * Check if the DC motor run time is expired, if this happend
+ * we turn off motor and reset status.
+ */
+INLINE bool check_timerIsExpired(int index)
+{
+
+	DC_MOTOR_LOCK;
+	bool check = ((dcm_all[index].expire_time - timer_clock()) < 0) &&
+			(dcm_all[index].expire_time != DC_MOTOR_NO_EXPIRE);
+	DC_MOTOR_UNLOCK;
+
+	return check;
+}
+
+/**
+ * Process to poll DC motor status.
+ * To use a Back-EMF technique (see brief for more details),
+ * we turn off a motor for CONFIG_DC_MOTOR_SAMPLE_DELAY, that value are stored
+ * in each DC motor config. For this implementation we assume
+ * that have a common CONFIG_DC_MOTOR_SAMPLE_DELAY, choose among a max delay
+ * to all DC motor configuration.
+ * The DC motor off time is choose to allow the out signal to
+ * be stable, so we can read and process this value for feedback controll loop.
+ * The period (CONFIG_DC_MOTOR_SAMPLE_PERIOD - CONFIG_DC_MOTOR_SAMPLE_DELAY)
+ * that every time we turn off a DC motor is choose to have a feedback controll
+ * more responsive or less responsive.
+ */
+static void NORETURN dc_motor_poll(void)
+{
+	for (;;)
+	{
+		/*
+		 * For all DC motor we read and process output singal,
+		 * and choose the max value to off time
+		 */
+		for (int i = 0; i < CONFIG_NUM_DC_MOTOR; i++)
+		{
+			if (!dcm_all[i].cfg)
+				continue;
+
+			if (check_timerIsExpired(i))
+				dc_motor_stop(i);
+			else
+				dc_motor_do(i);
+
+			/*
+			 * If we read speed from trimmer we update the target
+			 * speed value when motor is running so we can make
+			 * dc motor speed regulation.
+			 */
+			if (dcm_all[i].cfg->speed_dev_id != DC_MOTOR_NO_DEV_SPEED)
+				dc_motor_setSpeed(i, dc_motor_readTargetSpeed(i));
+		}
+
+		//Wait for next sampling
+		timer_delay(CONFIG_DC_MOTOR_SAMPLE_PERIOD - CONFIG_DC_MOTOR_SAMPLE_DELAY);
+
+		for (int i = 0; i < CONFIG_NUM_DC_MOTOR; i++)
+		{
+			if (!dcm_all[i].cfg)
+				continue;
+
+			if (check_timerIsExpired(i))
+				dc_motor_stop(i);
+
+			DC_MOTOR_LOCK;
+			if (dcm_all[i].status & DC_MOTOR_ACTIVE)
+			{
+				DC_MOTOR_DISABLE(dcm_all[i].index);
+				pwm_enable(dcm_all[i].cfg->pwm_dev, false);
+			}
+			DC_MOTOR_UNLOCK;
+		}
+
+		//Wait some time to allow signal to stabilize before sampling
+		timer_delay(CONFIG_DC_MOTOR_SAMPLE_DELAY);
+	}
 }
 
 /**
@@ -175,55 +334,64 @@ static void dc_motor_do(int index)
 void dc_motor_setDir(int index, bool dir)
 {
 	DCMotor *dcm = &dcm_all[index];
-
-	if (dir != (dcm->status & DC_MOTOR_DIR))
-	{
-		//Reset previous direction flag, and set new
-		dcm->status &= ~DC_MOTOR_DIR;
-		dcm->status |= DC_MOTOR_DIR;
-
-		/*
-		 * To set dc motor direction we must also set the
-		 * PWM polarity according with dc motor driver chip
-		 */
-		pwm_setPolarity(dcm->cfg->pwm_dev, dir);
-		DC_MOTOR_SET_DIR(index, dir);
-	}
+	DC_MOTOR_LOCK;
+	DC_MOTOR_SET_STATUS_DIR(dcm->status, dir);
+	DC_MOTOR_UNLOCK;
 }
-
 
 /**
  * Set DC motor speed.
  */
 void dc_motor_setSpeed(int index, dc_speed_t speed)
 {
-	dcm_all[index].tgt_speed = speed;
+	DCMotor *dcm = &dcm_all[index];
+
+	DC_MOTOR_LOCK;
+	dcm->tgt_speed = speed;
+	DC_MOTOR_UNLOCK;
+
+	LOG_INFO("DC Motor[%d]: tgt_speed[%d]\n", index, dcm->tgt_speed);
 }
 
 /**
- * Enable or disable dc motor
+ * Set among of time that dc motor should run.
+ */
+void dc_motor_startTimer(int index, mtime_t on_time)
+{
+	DC_MOTOR_LOCK;
+	dcm_all[index].expire_time = DC_MOTOR_NO_EXPIRE;
+	if (on_time != DC_MOTOR_NO_EXPIRE)
+	{
+		dcm_all[index].expire_time = timer_clock() + ms_to_ticks(on_time);
+		dc_motor_start(index);
+	}
+	DC_MOTOR_UNLOCK;
+}
+
+void dc_motor_waitStop(int index)
+{
+	DCMotor *dcm = &dcm_all[index];
+	bool loop = true;
+
+	while (loop)
+	{
+		DC_MOTOR_LOCK;
+		loop = dcm->status & DC_MOTOR_ACTIVE;
+		DC_MOTOR_UNLOCK;
+
+		cpu_relax();
+	}
+}
+
+/**
+ * Enable or disable dc motor.
  */
 void dc_motor_enable(int index, bool state)
 {
-	DCMotor *dcm = &dcm_all[index];
-
-	/*
-	 * Clean all PID stutus variable, becouse
-	 * we start with new one.
-	 */
-	pid_control_reset(&dcm->pid_ctx);
-
 	if (state)
-	{
-		dcm->status |= DC_MOTOR_ACTIVE;
-	}
+		dc_motor_start(index);
 	else
-	{
-		pwm_enable(dcm->cfg->pwm_dev, false);
-		DC_MOTOR_DISABLE(dcm->index);
-
-		dcm->status &= ~DC_MOTOR_ACTIVE;
-	}
+		dc_motor_stop(index);
 }
 
 /**
@@ -233,20 +401,7 @@ void dc_motor_setup(int index, DCMotorConfig *dcm_conf)
 {
 	DCMotor *dcm = &dcm_all[index];
 
-	dcm->cfg = dcm_conf;
-
-	/*
-	 * Apply config value.
-	 */
-	dcm->index = index;
-
-	pwm_setFrequency(dcm->cfg->pwm_dev, dcm->cfg->freq);
-	pwm_setPolarity(dcm->cfg->pwm_dev, dcm->cfg->pol);
-	pwm_enable(dcm->cfg->pwm_dev, false);
-
-	//Init pid control
-	pid_control_init(&dcm->pid_ctx, &dcm->cfg->pid_cfg);
-
+	DC_MOTOR_LOCK;
 	/*
 	 * We are using the same sample period for each
 	 * motor, and so we check if this value is the same
@@ -258,37 +413,76 @@ void dc_motor_setup(int index, DCMotorConfig *dcm_conf)
 	 * in this way we can controll a DC motor also without a
 	 * kernel, increasing a portability on other target.
 	 */
-	if (!sample_period)
-		sample_period = dcm->cfg->pid_cfg.sample_period;
+	pid_control_setPeriod(&dcm_conf->pid_cfg, CONFIG_DC_MOTOR_SAMPLE_PERIOD);
 
-	ASSERT(sample_period == dcm->cfg->pid_cfg.sample_period);
+	//Init pid control
+	pid_control_init(&dcm->pid_ctx, &dcm_conf->pid_cfg);
+
+
+	dcm->cfg = dcm_conf;
+
+	/*
+	 * Apply config value.
+	 */
+	dcm->index = index;
+
+	/*
+	 * By default the motor run forever..
+	 */
+	dcm->expire_time = DC_MOTOR_NO_EXPIRE;
+
+	/*
+	 * By default set target speed.
+	 */
+	dcm->tgt_speed = dcm_conf->speed;
+
+	/*
+	 * Clear the status.
+	 */
+	dcm->status = 0;
+
+	pwm_setFrequency(dcm->cfg->pwm_dev, dcm->cfg->freq);
+	pwm_enable(dcm->cfg->pwm_dev, false);
 
 	//Set default direction for DC motor
 	DC_MOTOR_SET_DIR(dcm->index, dcm->cfg->dir);
+	DC_MOTOR_SET_STATUS_DIR(dcm->status, dcm->cfg->dir);
 
-	LOG_INFO("DC motort[%d]:\n", dcm->index);
-	LOG_INFO("> PID: kp[%lf],ki[%lf],kd[%lf]\n", dcm->cfg->pid_cfg.kd, dcm->cfg->pid_cfg.ki, dcm->cfg->pid_cfg.kd);
-	LOG_INFO("> PWM: pwm_dev[%d], freq[%ld], sample[%ld]\n", dcm->cfg->pwm_dev, dcm->cfg->freq, dcm->cfg->sample_delay);
+	DC_MOTOR_UNLOCK;
+
+	LOG_INFO("DC motor[%d]:\n", dcm->index);
+	LOG_INFO("> PID: kp[%f],ki[%f],kd[%f]\n", dcm->cfg->pid_cfg.kp, dcm->cfg->pid_cfg.ki, dcm->cfg->pid_cfg.kd);
+	LOG_INFO("> PWM: pwm_dev[%d], freq[%ld], sample[%d]\n", dcm->cfg->pwm_dev, dcm->cfg->freq,CONFIG_DC_MOTOR_SAMPLE_DELAY);
 	LOG_INFO("> ADC: adc_ch[%d], adc_max[%d], adc_min[%d]\n", dcm->cfg->adc_ch, dcm->cfg->adc_max, dcm->cfg->adc_min);
 	LOG_INFO("> DC: dir[%d], speed[%d]\n", dcm->cfg->dir, dcm->cfg->speed);
-
 }
 
+/**
+ * If we had enabled the priority scheduling, we can adjust the
+ * DC motor poll process priority.
+ */
+void dc_motor_setPriority(int priority)
+{
+	ASSERT(CONFIG_KERN);
+	ASSERT(dc_motor);
+	proc_setPri(dc_motor, priority);
+}
 
 /**
- * Init DC motor
+ * Init DC motor.
+ * \a priority: sets the dc motor process priority.
  */
 void dc_motor_init(void)
 {
-	memset(dcm_all, 0, sizeof(dcm_all));
-
-	//Init a sample period
-	sample_period = 0;
+	ASSERT(CONFIG_KERN);
 
 	MOTOR_DC_INIT();
 
-	//Create a dc motor poll process
-	proc_new(dc_motor_poll, NULL, sizeof(dc_motor_poll_stack), dc_motor_poll_stack);
+	#if (CONFIG_KERN_PREEMPT && CONFIG_DC_MOTOR_USE_SEM)
+		sem_init(&dc_motor_sem);
+	#endif
 
+	//Create a dc motor poll process
+	dc_motor = proc_new_with_name("DC_Motor", dc_motor_poll, NULL, sizeof(dc_motor_poll_stack), dc_motor_poll_stack);
 }
 

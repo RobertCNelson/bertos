@@ -31,8 +31,12 @@
  * -->
  *
  * \author Andrea Grandi <andrea@develer.com>
+ * \author Daniele Basile <asterix@develer.com>
  *
- * \brief Tag protocol (protocol).
+ * \brief KeyTAG parser.
+ *
+ * This module parse TAG message that come from comunication channel,
+ * and convert the tag value into string.
  *
  * TAG protocol is decribed in this way:
  * <pre>
@@ -44,13 +48,25 @@
 
 #include "keytag.h"
 
+#include <cfg/debug.h>
+// Define log settings for cfg/log.h
+#define LOG_LEVEL    CONFIG_KEYTAG_LOG_LEVEL
+#define LOG_FORMAT   CONFIG_KEYTAG_LOG_FORMAT
+#include <cfg/log.h>
+#include <cfg/macros.h>
+
 #include <kern/kfile.h>
 
-#include <drv/timer.h>
-#include <drv/ser.h>
+#include <string.h>
+/**
+ * Starting communication char (STX).
+ */
+#define TAG_STX 0x02
 
-#include <cfg/macros.h>
-#include <cfg/debug.h>
+/**
+ * Ending communication char (ETX).
+ */
+#define TAG_ETX 0x03
 
 static void keytag_clearPkt(struct TagPacket *pkt)
 {
@@ -58,14 +74,27 @@ static void keytag_clearPkt(struct TagPacket *pkt)
 	pkt->len = 0;
 }
 
-void keytag_init(struct TagPacket *pkt, struct KFile *comm, struct KFile *tag)
+/**
+ * DEPRECATED FUCNTIONS
+ * To read the tag string from device you shoul use the keytag_recv
+ * fuction, that return the string if we had received it.
+ */
+void keytag_poll(struct TagPacket *pkt)
 {
-	keytag_clearPkt(pkt);
-	pkt->host = comm;
-	pkt->tag = tag;
+	#warning __FILTER_NEXT_WARNING__
+	#warning keytag_poll function is depreca use keytag_recv instead
+	uint8_t buf[CONFIG_TAG_MAX_LEN];
+	int len;
+	if ((len = keytag_recv(pkt, buf, sizeof(buf))) != EOF)
+		kfile_write(pkt->host, buf, len);
 }
 
-void keytag_poll(struct TagPacket *pkt)
+/**
+ * Receive the tag message from channel, and if
+ * the tag is good put the converted string into given buffer.
+ * The fuction return the len of found tag string, otherwise EOF.
+ */
+int keytag_recv(struct TagPacket *pkt, uint8_t *tag, size_t len)
 {
 	int c;
 
@@ -77,7 +106,7 @@ void keytag_poll(struct TagPacket *pkt)
 		{
 			/* When STX is found a new packet begins */
 			if (pkt->sync)
-				kprintf("TAG double sync!\n");
+				LOG_WARN("TAG double sync!\n");
 			keytag_clearPkt(pkt);
 			pkt->sync = true;
 		}
@@ -86,17 +115,20 @@ void keytag_poll(struct TagPacket *pkt)
 			/* Check for end of packet */
 			if (c == TAG_ETX)
 			{
-				pkt->buf[TAG_MAX_PRINT_CHARS] = '\x0';
-				/* Write read TAG on communication serial */
-				kfile_printf(pkt->host, "tag %s", pkt->buf);
+				/* Terminate the tag string */
+				size_t tag_len = MIN(len, pkt->len);
+
+				/* Save read tag */
+				memcpy(tag, pkt->buf, tag_len);
 				pkt->sync = false;
+				return tag_len;
 			}
 			else
 			{
 				/* Check for buffer overflow */
-				if (pkt->len >= TAG_MAX_LEN)
+				if (pkt->len >= CONFIG_TAG_MAX_LEN)
 				{
-					kprintf("TAG buffer overflow\n");
+					LOG_ERR("TAG buffer overflow\n");
 					pkt->sync = false;
 				}
 				else
@@ -113,8 +145,20 @@ void keytag_poll(struct TagPacket *pkt)
 	}
 	if (kfile_error(pkt->tag) != 0)
 	{
-		kprintf("Error %08x\n", kfile_error(pkt->tag));
+		LOG_ERR("Error %04x\n", kfile_error(pkt->tag));
 		kfile_clearerr(pkt->tag);
 	}
 
+	return EOF;
 }
+
+/**
+ * Init the keytag module.
+ */
+void keytag_init(struct TagPacket *pkt, struct KFile *comm, struct KFile *tag)
+{
+	keytag_clearPkt(pkt);
+	pkt->tag = tag;
+	pkt->host = comm;
+}
+

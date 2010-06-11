@@ -41,7 +41,6 @@
  * Whenever a timer expires you need to explicitly arm it again with timer_add(). If you want to abort a timer, use timer_abort().
  * You can use conversion macros when using msecs to specify the delay.
  *
- * \version $Id$
  * \author Bernie Innocenti <bernie@codewiz.org>
  *
  * $WIZ$ module_name = "timer"
@@ -145,6 +144,7 @@ INLINE ticks_t timer_clock_unlocked(void)
 {
 	return _clock;
 }
+
 
 /** Convert \a ms [ms] to ticks. */
 INLINE ticks_t ms_to_ticks(mtime_t ms)

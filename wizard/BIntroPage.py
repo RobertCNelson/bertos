@@ -45,11 +45,13 @@ class BIntroPage(BWizardPage):
     Initial page of the wizard. Permit to select the project name and the directory
     where the project will be created.
     """
-    
+
     def __init__(self):
         BWizardPage.__init__(self, UI_LOCATION + "/intro_page.ui")
         self.setTitle(self.tr("Welcome in BeRTOS Wizard!"))
-    
+        pixmap = self.pageContent.imageLabel.pixmap()
+        self.pageContent.imageLabel.setPixmap(pixmap.scaled(300, 400, Qt.KeepAspectRatio))
+
     ## Overloaded QWizardPage methods ##
 
     def isComplete(self):
@@ -57,6 +59,5 @@ class BIntroPage(BWizardPage):
         Overload of the QWizardPage isComplete method.
         """
         return True
-    
-    ####
 
+    ####

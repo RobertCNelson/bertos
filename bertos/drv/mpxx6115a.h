@@ -30,14 +30,23 @@
  *
  * -->
  *
- * \brief Covert read voltage from MPXX6115A Pressure Sensor in hPascal value.
+ * \brief MPXX6115A Pressure Sensor convert formula.
+ *
+ * This module convert read voltage value from MPXX6115A
+ * pressure sensor into hPascal value unit.
  *
  * \author Daniele Basile <asterix@develer.com>
  *
+ * $WIZ$ module_name = "mpxx6115a"
+ * $WIZ$ module_depends = "adc"
+ * $WIZ$ module_configuration = ""
+ * $WIZ$ module_hw = ""
  */
 
 #ifndef DRV_MPXX6115A_H
 #define DRV_MPXX6115A_H
+
+#include <drv/adc.h>
 
 #define MPXX6115A_DIV_CONST    0.009f
 #define MPXX6115A_ADD_CONST    0.095f

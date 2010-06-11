@@ -32,14 +32,11 @@
  *
  * \brief Driver for the 24xx16 and 24xx256 I2C EEPROMS.
  *
- * \version $Id$
- *
  * \author Stefano Fedrigo <aleph@develer.com>
  * \author Bernie Innocenti <bernie@codewiz.org>
  *
  * $WIZ$ module_name = "eeprom"
  * $WIZ$ module_depends = "kfile", "i2c"
- * $WIZ$ module_supports = "not at91"
  */
 
 #ifndef DRV_EEPROM_H
@@ -55,9 +52,11 @@
  */
 typedef enum EepromType
 {
+	EEPROM_24XX08,
 	EEPROM_24XX16,
 	EEPROM_24XX256,
 	EEPROM_24XX512,
+	EEPROM_24XX1024,
 	EEPROM_CNT,
 } EepromType;
 

@@ -26,14 +26,13 @@
  * invalidate any other reasons why the executable file might be covered by
  * the GNU General Public License.
  *
- * Copyright 2005 Develer S.r.l. (http://www.develer.com/)
+ * Copyright 2005, 2010 Develer S.r.l. (http://www.develer.com/)
  *
  * -->
  *
- * \version $Id$
- *
  * \author Bernie Innocenti <bernie@codewiz.org>
  * \author Francesco Sacchi <batt@develer.com>
+ * \author Luca Ottaviano <lottaviano@develer.com>
  *
  * \brief Low-level timer module for AVR (implementation).
  *
@@ -50,7 +49,7 @@
 
 #include <avr/io.h>
 
-#if CPU_AVR_ATMEGA1281 || CPU_AVR_ATMEGA168
+#if CPU_AVR_ATMEGA1281 || CPU_AVR_ATMEGA168 || CPU_AVR_ATMEGA328P
 	#define REG_TIFR0 TIFR0
 	#define REG_TIFR1 TIFR1
 	#define REG_TIFR2 TIFR2
@@ -83,6 +82,7 @@
 	#define REG_TIFR0 TIFR
 	#define REG_TIFR1 TIFR
 	#define REG_TIFR2 TIFR
+	#define REG_TIFR3 TIFR
 
 	#define REG_TIMSK0 TIMSK
 	#define REG_TIMSK1 TIMSK
@@ -137,7 +137,7 @@
 			#else
 				#error Unsupported value of TIMER_PRESCALER
 			#endif
-		;
+
 		TCNT0 = 0x00;                 /* Initialization of Timer/Counter */
 		REG_OCR0A = OCR_DIVISOR;           /* Timer/Counter Output Compare Register */
 
@@ -205,7 +205,7 @@
 		/* Clear on Compare match & prescaler = 64, internal sys clock.
 		   When changing prescaler change TIMER_HW_HPTICKS_PER_SEC too */
 		TCNT2 = 0x00;         /* initialization of Timer/Counter */
-		REG_OCR2A = OCR_DIVISOR;   /* Timer/Counter Output Compare Register */
+		REG_OCR2A = (uint8_t)OCR_DIVISOR;   /* Timer/Counter Output Compare Register */
 
 		/* Enable timer interrupts: Timer/Counter2 Output Compare (OCIE2) */
 		REG_TIMSK2 &= ~BV(TOIE2);
@@ -215,6 +215,10 @@
 	}
 
 #elif (CONFIG_TIMER == TIMER_ON_OVERFLOW3)
+
+	#if CPU_AVR_ATMEGA168 || CPU_AVR_ATMEGA328P || CPU_AVR_ATMEGA32
+		#error For select target there is not TIMER_ON_OVERFLOW3, please select an other one.
+	#endif
 
 	void timer_hw_init(void)
 	{
@@ -244,7 +248,7 @@
 		TCNT3 = 0x00;
 
 		/* Enable timer interrupt: Timer/Counter3 Overflow */
-		REG_TIMSK3 = |= BV(TOIE3);
+		REG_TIMSK3 |= BV(TOIE3);
 
 		IRQ_RESTORE(flags);
 	}

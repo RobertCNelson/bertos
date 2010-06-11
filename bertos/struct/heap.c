@@ -32,7 +32,6 @@
  *
  * \brief Heap subsystem (public interface).
  *
- * \version $Id$
  * \author Bernie Innocenti <bernie@codewiz.org>
  */
 
@@ -48,7 +47,7 @@
 /*
  * This function prototype is deprecated, will change in:
  * void heap_init(struct Heap* h, heap_buf_t* memory, size_t size)
- * in the nex BeRTOS release.
+ * in the next BeRTOS release.
  */
 void heap_init(struct Heap* h, void* memory, size_t size)
 {
@@ -127,9 +126,9 @@ void heap_freemem(struct Heap* h, void *mem, size_t size)
 	if (!size)
 		size = sizeof(MemChunk);
 
-	/* Special case: first chunk in the free list */
+	/* Special cases: first chunk in the free list or memory completely full */
 	ASSERT((uint8_t*)mem != (uint8_t*)h->FreeList);
-	if (((uint8_t *)mem) < ((uint8_t *)h->FreeList))
+	if (((uint8_t *)mem) < ((uint8_t *)h->FreeList) || !h->FreeList)
 	{
 		/* Insert memory block before the current free list head */
 		prev = (MemChunk *)mem;
@@ -182,6 +181,25 @@ void heap_freemem(struct Heap* h, void *mem, size_t size)
 		/* There should be only one merge opportunity, becuase we always merge on free */
 		ASSERT((uint8_t*)prev + prev->size != (uint8_t*)prev->next);
 	}
+}
+
+/**
+ * Returns the number of free bytes in a heap.
+ * \param h the heap to check.
+ *
+ * \note The returned value is the sum of all free memory regions 
+ *       in the heap.
+ *       Those regions are likely to be *not* contiguous,
+ *       so a successive allocation may fail even if the
+ *       requested amount of memory is lower than the current free space.
+ */
+size_t heap_freeSpace(struct Heap *h)
+{
+	size_t free_mem = 0;
+	for (MemChunk *chunk = h->FreeList; chunk; chunk = chunk->next)
+		free_mem += chunk->size;
+
+	return free_mem;
 }
 
 #if CONFIG_HEAP_MALLOC

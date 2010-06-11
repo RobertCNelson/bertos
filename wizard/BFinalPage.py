@@ -49,17 +49,31 @@ class BFinalPage(BWizardPage):
     
     def __init__(self):
         BWizardPage.__init__(self, UI_LOCATION + "/final_page.ui")
-        self.setTitle(self.tr("Project created successfully"))
+        self.setTitle(self.tr("Project created successfully!"))
     
     ## Overloaded BWizardPage methods ##
         
-    def reloadData(self):
+    def reloadData(self, previous_id=None):
+        self.setVisible(False)
         """
         Overload of the BWizardPage reloadData method.
         """
-        QApplication.instance().setOverrideCursor(Qt.WaitCursor)
-        bertos_utils.createBertosProject(self.project())
-        QApplication.instance().restoreOverrideCursor()
+        try:
+            QApplication.instance().setOverrideCursor(Qt.WaitCursor)
+            try:
+                # This operation can throw WindowsError, if the directory is
+                # locked.
+                self.project.createBertosProject()
+            except OSError, e:
+                QMessageBox.critical(
+                    self,
+                    self.tr("Error removing destination directory"),
+                    self.tr("Error removing the destination directory. This directory or a file in it is in use by another user or application.\nClose the application which is using the directory and retry."))
+                self.wizard().back()
+                return
+        finally:
+            QApplication.instance().restoreOverrideCursor()
+        self.setVisible(True)
         self._plugin_dict = {}
         if os.name == "nt":
             output = self.projectInfo("OUTPUT")

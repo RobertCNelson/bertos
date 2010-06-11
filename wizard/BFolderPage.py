@@ -39,6 +39,9 @@ from PyQt4.QtGui import *
 from BWizardPage import *
 import bertos_utils
 
+from BCpuPage import BCpuPage
+from BBoardPage import BBoardPage
+
 from const import *
 
 class BFolderPage(BWizardPage):
@@ -61,6 +64,9 @@ class BFolderPage(BWizardPage):
         self.setDefaultFolder(self._destination_folder)
         if self.pageContent.projectPath.text() != "None":
             self.setProjectInfo("PROJECT_PATH", unicode(self.pageContent.projectPath.text()))
+            self.setProjectInfo("PROJECT_NAME", os.path.basename(unicode(self.pageContent.projectPath.text())))
+            self.setProjectInfo("PROJECT_SRC_PATH", os.path.join(self.projectInfo("PROJECT_PATH"), self.projectInfo("PROJECT_NAME")))
+            self.setProjectInfo("PROJECT_HW_PATH", os.path.join(self.projectInfo("PROJECT_PATH"), self.projectInfo("PROJECT_NAME")))
             return True
         else:
             return False
@@ -82,6 +88,7 @@ class BFolderPage(BWizardPage):
         self.connect(self.pageContent.nameEdit, SIGNAL("textChanged(const QString)"), self.nameChanged)
         self.connect(self.pageContent.directoryEdit, SIGNAL("textChanged(const QString)"), self.directoryChanged)
         self.connect(self.pageContent.directoryButton, SIGNAL("clicked()"), self.selectDirectory)
+        # self.connect(self.pageContent.customButton, SIGNAL("toggled(bool)"), self.isComplete)
     
     ####
 

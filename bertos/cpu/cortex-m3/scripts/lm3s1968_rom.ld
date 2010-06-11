@@ -30,16 +30,12 @@
  *
  * -->
  *
- * \version $Id: sysirq_at91.c 18273 2007-10-11 14:53:02Z batt $
- *
  * \author Manuele Fanelli <qwert@develer.com>
  *
  * \brief Script for Luminary Micro LM3S1968 Cortex M3 family processors.
  *
  */
 
-
-ENTRY(_init)
 SEARCH_DIR(.)
 OUTPUT_FORMAT("elf32-littlearm", "elf32-bigarm", "elf32-littlearm")
 OUTPUT_ARCH(arm)
@@ -53,15 +49,10 @@ MEMORY
   ram(rwx) : org = 0x20000000, len = 64k
 }
 
-
 /*
  * Define stack size here
  */
-FIQ_STACK_SIZE = 0x0100;
-IRQ_STACK_SIZE = 0x0100;
-ABT_STACK_SIZE = 0x0100;
-UND_STACK_SIZE = 0x0100;
-SVC_STACK_SIZE = 0x0400;
+STACK_SIZE = 0x1000;
 
 /*
  * Allocate section memory
@@ -84,12 +75,14 @@ SECTIONS
     		. = ALIGN(4);
 	} > rom
 
-	_etext = .;
-	PROVIDE (__etext = .);
+	__text_end = .;
+	PROVIDE (__text_end = .);
 
-	.data : AT (_etext)
+	.data : AT (__text_end)
 	{
+		. = ALIGN (0x400);
 		PROVIDE (__data_start = .);
+		*(vtable)
 		*(.data .data.*)
 		. = ALIGN (4);
 		_edata = .;
@@ -110,34 +103,16 @@ SECTIONS
 	 * Allocated stack at the end of bss section.
 	 * Data heap is allocate at end of stack.
 	 */
-	PROVIDE (__stack_start = .);
+	PROVIDE (__msp_start = .);
+	. = ALIGN(8);
+	. += STACK_SIZE;
+	PROVIDE (__msp_end = .);
 
-	PROVIDE (__stack_fiq_start = .);
-	. += FIQ_STACK_SIZE;
-	. = ALIGN(4);
-	PROVIDE (__stack_fiq_end = .);
-
-	PROVIDE (__stack_irq_start = .);
-	. += IRQ_STACK_SIZE;
-	. = ALIGN(4);
-	PROVIDE (__stack_irq_end = .);
-
-	PROVIDE (__stack_abt_start = .);
-	. += ABT_STACK_SIZE;
-	. = ALIGN(4);
-	PROVIDE (__stack_abt_end = .);
-
-	PROVIDE (__stack_und_start = .);
-	. += UND_STACK_SIZE;
-	. = ALIGN(4);
-	PROVIDE (__stack_und_end = .);
-
-	PROVIDE (__stack_svc_start = .);
-	. += SVC_STACK_SIZE;
-	. = ALIGN(4);
-	PROVIDE (__stack_svc_end = .);
-
-	PROVIDE (__stack_end = .);
+	PROVIDE (__psp_start = .);
+	. = ALIGN(8);
+	. += STACK_SIZE;
+	PROVIDE (__psp_end = .);
 
 	PROVIDE (__heap_start = .);
+	. = ALIGN(8);
 }

@@ -35,6 +35,7 @@
 
 import os
 
+from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 from BWizardPage import *
 import bertos_utils
@@ -79,17 +80,21 @@ class BModulePage(BWizardPage):
         self.connect(self.pageContent.moduleTree, SIGNAL("itemPressed(QTreeWidgetItem*, int)"), self.fillPropertyTable)
         self.connect(self.pageContent.moduleTree, SIGNAL("itemPressed(QTreeWidgetItem*, int)"), self.moduleClicked)
         self.connect(self.pageContent.moduleTree, SIGNAL("itemChanged(QTreeWidgetItem*, int)"), self.dependencyCheck)
-        self.connect(self.pageContent.propertyTable, SIGNAL("itemSelectionChanged()"), self.showPropertyDescription)
 
-    def reloadData(self):
+    def reloadData(self, previous_id=None):
         """
         Overload of the BWizardPage reloadData method.
         """
-        QApplication.instance().setOverrideCursor(Qt.WaitCursor)
-        self.setupUi()
-        self.loadModuleData()
-        self.fillModuleTree()
-        QApplication.instance().restoreOverrideCursor()
+        # Check if the user are approaching this page from the previous or the
+        # next one.
+        if previous_id is None or previous_id < self.wizard().currentId():
+            try:
+                QApplication.instance().setOverrideCursor(Qt.WaitCursor)
+                self.setupUi()
+                self.loadModuleData()
+                self.fillModuleTree()
+            finally:
+                QApplication.instance().restoreOverrideCursor()
     
     ####
     
@@ -107,7 +112,7 @@ class BModulePage(BWizardPage):
         module = self.currentModule()
         if module:
             try:
-                supported = bertos_utils.isSupported(self.project(), module=module)
+                supported = bertos_utils.isSupported(self.project, module=module)
             except SupportedException, e:
                 self.exceptionOccurred(self.tr("Error evaluating \"%1\" for module %2").arg(e.support_string).arg(module))
                 supported = True
@@ -134,7 +139,7 @@ class BModulePage(BWizardPage):
                         # Doesn't show the hidden fields
                         continue
                     try:
-                        param_supported = bertos_utils.isSupported(self.project(), property_id=(configuration, property))
+                        param_supported = bertos_utils.isSupported(self.project, property_id=(configuration, property))
                     except SupportedException, e:
                         self.exceptionOccurred(self.tr("Error evaluating \"%1\" for parameter %2").arg(e.support_string).arg(property))
                         param_supported = True
@@ -144,6 +149,8 @@ class BModulePage(BWizardPage):
                     # Set the row count to the current index + 1
                     self.pageContent.propertyTable.setRowCount(index + 1)
                     item = QTableWidgetItem(configurations[property]["brief"])
+                    item.setFlags(item.flags() & ~Qt.ItemIsSelectable)
+                    item.setToolTip(property)
                     item.setData(Qt.UserRole, qvariant_converter.convertString(property))
                     self.pageContent.propertyTable.setItem(index, 0, item)
                     if "type" in configurations[property]["informations"] and configurations[property]["informations"]["type"] == "boolean":
@@ -216,12 +223,13 @@ class BModulePage(BWizardPage):
         """
         Loads the module data.
         """
-        # Load the module data only if it isn't already loaded
-        if not self.projectInfo("MODULES") \
-                and not self.projectInfo("LISTS") \
-                and not self.projectInfo("CONFIGURATIONS"):
+        # Do not load the module data again when the Wizard is in editing mode
+        # or when it's working on a preset.
+        if not self.project.edit and not self.project.from_preset:
+            # Load the module data every time so that if the user changed the cpu
+            # the right configurations are picked up.
             try:
-                bertos_utils.loadModuleData(self.project())
+                self.project.loadModuleData()
             except ModuleDefineException, e:
                 self.exceptionOccurred(self.tr("Error parsing line '%2' in file %1").arg(e.path).arg(e.line))
             except EnumDefineException, e:
@@ -248,7 +256,7 @@ class BModulePage(BWizardPage):
                 enabled = modules[module]["enabled"]
                 module_item = QTreeWidgetItem(item, QStringList([module]))
                 try:
-                    supported = bertos_utils.isSupported(self.project(), module=module)
+                    supported = bertos_utils.isSupported(self.project, module=module)
                 except SupportedException, e:
                     self.exceptionOccurred(self.tr("Error evaluating \"%1\" for module %2").arg(e.support_string).arg(module))
                     supported = True
@@ -373,7 +381,12 @@ class BModulePage(BWizardPage):
         """
         Returns the configuration for the selected module.
         """
-        configuration = self.projectInfo("MODULES")[module]["configuration"]
+        configuration = []
+        if module:
+            # On linux platform it seems that the behaviour of the focus
+            # changing is a bit different from the mac one. So if module is
+            # None then no configurations should be returned.
+            configuration = self.projectInfo("MODULES")[module]["configuration"]
         if len(configuration) > 0:
             return self.projectInfo("CONFIGURATIONS")[configuration]
         else:
@@ -401,65 +414,75 @@ class BModulePage(BWizardPage):
         """
         Resolves the selection dependencies.
         """
-        modules = self.projectInfo("MODULES")
-        modules[selectedModule]["enabled"] = True
-        self.setProjectInfo("MODULES", modules)
-        depends = self.projectInfo("MODULES")[selectedModule]["depends"]
-        unsatisfied = []
-        if self.pageContent.automaticFix.isChecked():
-            unsatisfied = self.selectDependencyCheck(selectedModule)
-        if len(unsatisfied) > 0:
-            for module in unsatisfied:
-                modules = self.projectInfo("MODULES")
-                modules[module]["enabled"] = True
-            for category in range(self.pageContent.moduleTree.topLevelItemCount()):
-                item = self.pageContent.moduleTree.topLevelItem(category)
-                for child in range(item.childCount()):
-                    if unicode(item.child(child).text(0)) in unsatisfied:
-                        self.setBold(item.child(child), True)
-                        self.setBold(item, True)
-                        item.child(child).setCheckState(0, Qt.Checked)
+        try:
+            qApp.setOverrideCursor(Qt.WaitCursor)
+            modules = self.projectInfo("MODULES")
+            modules[selectedModule]["enabled"] = True
+            self.setProjectInfo("MODULES", modules)
+            depends = self.projectInfo("MODULES")[selectedModule]["depends"]
+            unsatisfied = []
+            if self.pageContent.automaticFix.isChecked():
+                unsatisfied = self.selectDependencyCheck(selectedModule)
+            if len(unsatisfied) > 0:
+                for module in unsatisfied:
+                    modules = self.projectInfo("MODULES")
+                    modules[module]["enabled"] = True
+                for category in range(self.pageContent.moduleTree.topLevelItemCount()):
+                    item = self.pageContent.moduleTree.topLevelItem(category)
+                    for child in range(item.childCount()):
+                        if unicode(item.child(child).text(0)) in unsatisfied:
+                            self.setBold(item.child(child), True)
+                            self.setBold(item, True)
+                            item.child(child).setCheckState(0, Qt.Checked)
+        finally:
+            qApp.restoreOverrideCursor()
     
     def moduleUnselected(self, unselectedModule):
         """
         Resolves the unselection dependencies.
         """
-        modules = self.projectInfo("MODULES")
-        modules[unselectedModule]["enabled"] = False
-        self.setProjectInfo("MODULES", modules)
-        unsatisfied = []
-        unsatisfied_params = []
-        if self.pageContent.automaticFix.isChecked():
-            unsatisfied, unsatisfied_params = self.unselectDependencyCheck(unselectedModule)
-        if len(unsatisfied) > 0 or len(unsatisfied_params) > 0:
-            message = []
-            heading = self.tr("The module %1 is needed by").arg(unselectedModule)
-            message.append(heading)
-            module_list = ", ".join(unsatisfied)
-            param_list = ", ".join(["%s (%s)" %(param_name, module) for module, param_name in unsatisfied_params])
-            if module_list:
-                message.append(QString(module_list))
-            if module_list and param_list:
-                message.append(self.tr("and by"))
-            if param_list:
-                message.append(QString(param_list))
-            message_str = QStringList(message).join(" ")
-            message_str.append(self.tr("\n\nDo you want to automatically fix these conflicts?"))
-            choice = QMessageBox.warning(self, self.tr("Dependency error"), message_str, QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
-            if choice == QMessageBox.Yes:
-                for module in unsatisfied:
-                    modules = self.projectInfo("MODULES")
-                    modules[module]["enabled"] = False
-                for category in range(self.pageContent.moduleTree.topLevelItemCount()):
-                    item = self.pageContent.moduleTree.topLevelItem(category)
-                    for child in range(item.childCount()):
-                        if unicode(item.child(child).text(0)) in unsatisfied:
-                            item.child(child).setCheckState(0, Qt.Unchecked)
-                for module, param in unsatisfied_params:
-                    configuration_file = self.projectInfo("MODULES")[module]["configuration"]
-                    configurations = self.projectInfo("CONFIGURATIONS")
-                    configurations[configuration_file][param]["value"] = "0"
-                    self.setProjectInfo("CONFIGURATIONS", configurations)
+        try:
+            qApp.setOverrideCursor(Qt.WaitCursor)
+            modules = self.projectInfo("MODULES")
+            modules[unselectedModule]["enabled"] = False
+            self.setProjectInfo("MODULES", modules)
+            unsatisfied = []
+            unsatisfied_params = []
+            if self.pageContent.automaticFix.isChecked():
+                unsatisfied, unsatisfied_params = self.unselectDependencyCheck(unselectedModule)
+            if len(unsatisfied) > 0 or len(unsatisfied_params) > 0:
+                message = []
+                heading = self.tr("The module %1 is needed by").arg(unselectedModule)
+                message.append(heading)
+                module_list = ", ".join(unsatisfied)
+                param_list = ", ".join(["%s (%s)" %(param_name, module) for module, param_name in unsatisfied_params])
+                if module_list:
+                    message.append(QString(module_list))
+                if module_list and param_list:
+                    message.append(self.tr("and by"))
+                if param_list:
+                    message.append(QString(param_list))
+                message_str = QStringList(message).join(" ")
+                message_str.append(self.tr("\n\nDo you want to automatically fix these conflicts?"))
+                qApp.restoreOverrideCursor()
+                choice = QMessageBox.warning(self, self.tr("Dependency error"), message_str, QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+                qApp.setOverrideCursor(Qt.WaitCursor)
+                if choice == QMessageBox.Yes:
+                    for module in unsatisfied:
+                        modules = self.projectInfo("MODULES")
+                        modules[module]["enabled"] = False
+                    for category in range(self.pageContent.moduleTree.topLevelItemCount()):
+                        item = self.pageContent.moduleTree.topLevelItem(category)
+                        for child in range(item.childCount()):
+                            if unicode(item.child(child).text(0)) in unsatisfied:
+                                item.child(child).setCheckState(0, Qt.Unchecked)
+                    for module, param in unsatisfied_params:
+                        configuration_file = self.projectInfo("MODULES")[module]["configuration"]
+                        configurations = self.projectInfo("CONFIGURATIONS")
+                        configurations[configuration_file][param]["value"] = "0"
+                        self.setProjectInfo("CONFIGURATIONS", configurations)
+        finally:
+            qApp.restoreOverrideCursor()
     
     def selectDependencyCheck(self, module):
         """

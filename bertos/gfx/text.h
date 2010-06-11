@@ -35,11 +35,9 @@
  *
  * \author Bernie Innocenti <bernie@codewiz.org>
  * \author Stefano Fedrigo <aleph@develer.com>
- * \version $Id$
  *
  * $WIZ$ module_name = "text"
- * $WIZ$ module_harvard = "pgm_memory"
- * $WIZ$ module_depends = "bitmap"
+ * $WIZ$ module_depends = "bitmap", "line"
  */
 
 #ifndef GFX_TEXT_H

@@ -39,14 +39,14 @@ import os
 
 sys.path.append("../")
 
-from BProject import BProject
+import BProject
 from bertos_utils import *
 
 def main():
-    p = BProject()
-    p.setInfo("SOURCES_PATH", "../../")
-    loadSourceTree(p)
-    info = loadCpuInfos(p)
+    p = BProject.BProject()
+    p.setInfo("BERTOS_PATH", "../../")
+    p.loadSourceTree()
+    info = p.getCpuInfos()
     tags = getTagSet(info)
     print tags
 

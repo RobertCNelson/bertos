@@ -40,14 +40,25 @@ import re
 import shutil
 # Use custom copytree function
 import copytree
+import relpath
 import pickle
 
 import const
 import plugins
 import DefineException
-import BProject
+
+from _wizard_version import WIZARD_VERSION
 
 from LoadException import VersionException, ToolchainException
+
+def _cmp(x, y):
+    result = cmp(x["info"].get('ord', 0), y["info"].get('ord', 0))
+    if result == 0:
+        result = cmp(
+            x["info"].get("name", x["info"]["filename"]).lower(),
+            y["info"].get("name", y["info"]["filename"]).lower()
+        )
+    return result
 
 def isBertosDir(directory):
    return os.path.exists(directory + "/VERSION")
@@ -55,68 +66,42 @@ def isBertosDir(directory):
 def bertosVersion(directory):
    return open(directory + "/VERSION").readline().strip()
 
-def loadBertosProject(project_file, info_dict):
-    project_data = pickle.loads(open(project_file, "r").read())
-    project_info = BProject.BProject()
-    project_info.setInfo("PROJECT_PATH", os.path.dirname(project_file))
-    if "SOURCES_PATH" in info_dict:
-        project_data["SOURCES_PATH"] = info_dict["SOURCES_PATH"]
-    if os.path.exists(project_data["SOURCES_PATH"]):
-        project_info.setInfo("SOURCES_PATH", project_data["SOURCES_PATH"])
-    else:
-        raise VersionException(project_info)
-    loadSourceTree(project_info)
-    cpu_name = project_data["CPU_NAME"]
-    project_info.setInfo("CPU_NAME", cpu_name)
-    cpu_info = loadCpuInfos(project_info)
-    for cpu in cpu_info:
-        if cpu["CPU_NAME"] == cpu_name:
-            project_info.setInfo("CPU_INFOS", cpu)
-            break
-    tag_list = getTagSet(cpu_info)
-    # Create, fill and store the dict with the tags
-    tag_dict = {}
-    for element in tag_list:
-        tag_dict[element] = False
-    infos = project_info.info("CPU_INFOS")
-    for tag in tag_dict:
-        if tag in infos["CPU_TAGS"] + [infos["CPU_NAME"], infos["TOOLCHAIN"]]:
-            tag_dict[tag] = True
-        else:
-            tag_dict[tag] = False
-    project_info.setInfo("ALL_CPU_TAGS", tag_dict)
-    if "TOOLCHAIN" in info_dict:
-        project_data["TOOLCHAIN"] = info_dict["TOOLCHAIN"]
-    if os.path.exists(project_data["TOOLCHAIN"]["path"]):
-        project_info.setInfo("TOOLCHAIN", project_data["TOOLCHAIN"])
-    else:
-        raise ToolchainException(project_info)
-    project_info.setInfo("SELECTED_FREQ", project_data["SELECTED_FREQ"])
-    project_info.setInfo("OUTPUT", project_data["OUTPUT"])
-    loadModuleData(project_info, True)
-    setEnabledModules(project_info, project_data["ENABLED_MODULES"])
-    return project_info
-
-def setEnabledModules(project_info, enabled_modules):
-    modules = project_info.info("MODULES")
-    files = {}
-    for module, information in modules.items():
-        information["enabled"] = module in enabled_modules
-	for dependency in information["depends"]:
-            if not dependency in modules:
-	        if dependency in files:
-		    files[dependency] += 1
-		else:
-		    files[dependency] = 1
-    project_info.setInfo("MODULES", modules)
-    project_info.setInfo("FILES", files)
-
 def enabledModules(project_info):
     enabled_modules = []
     for name, module in project_info.info("MODULES").items():
         if module["enabled"]:
             enabled_modules.append(name)
     return enabled_modules
+
+def presetList(directory):
+    """
+    Return the list of the preset found in the selected BeRTOS Version.
+    """
+    abspath = os.path.join(directory, const.PREDEFINED_BOARDS_DIR)
+    preset_list = dict([
+        (os.path.join(abspath, preset_dir), presetInfo(os.path.join(abspath, preset_dir)))
+        for preset_dir in os.listdir(os.path.join(directory, const.PREDEFINED_BOARDS_DIR))
+    ])
+    return preset_list
+
+def presetInfo(preset_dir):
+    """
+    Return the preset-relevant info contined into the project_file.
+    """
+    preset_info = pickle.loads(open(os.path.join(preset_dir, "project.bertos"), "r").read())
+    try:
+        description = open(os.path.join(preset_dir, "description"), "r").read()
+    except IOError:
+        # No description file found.
+        description = ""
+    relevant_info = {
+        "CPU_NAME": preset_info.get("CPU_NAME"),
+        "SELECTED_FREQ": preset_info.get("SELECTED_FREQ"),
+        "WIZARD_VERSION": preset_info.get("WIZARD_VERSION", None),
+        "PRESET_NAME": preset_info.get("PROJECT_NAME"),
+        "PRESET_DESCRIPTION": description.decode("utf-8"),
+    }
+    return relevant_info
 
 def mergeSources(srcdir, new_sources, old_sources):
     # The current mergeSources function provide only a raw copy of the sources in the
@@ -135,120 +120,72 @@ def projectFileGenerator(project_info):
         if information["enabled"]:
             enabled_modules.append(module)
     project_data["ENABLED_MODULES"] = enabled_modules
-    project_data["SOURCES_PATH"] = project_info.info("SOURCES_PATH")
+    if project_info.info("PRESET"):
+        # For presets save again the BERTOS_PATH into project file
+        project_data["PRESET"] = True
+        project_data["BERTOS_PATH"] = relpath.relpath(project_info.info("BERTOS_PATH"), directory)
+    elif project_info.edit:
+        # If in editing mode the BERTOS_PATH is maintained
+        project_data["BERTOS_PATH"] = relpath.relpath(project_info.info("BERTOS_PATH"), directory)
+    else:
+        # Use the local BeRTOS version instead of the original one
+        # project_data["BERTOS_PATH"] = project_info.info("BERTOS_PATH")
+        project_data["BERTOS_PATH"] = "."
+    project_data["PROJECT_NAME"] = project_info.info("PROJECT_NAME", os.path.basename(directory))
+    project_src_relpath = relpath.relpath(project_info.info("PROJECT_SRC_PATH"), directory)
+    project_data["PROJECT_SRC_PATH"] = project_src_relpath
     project_data["TOOLCHAIN"] = project_info.info("TOOLCHAIN")
     project_data["CPU_NAME"] = project_info.info("CPU_NAME")
     project_data["SELECTED_FREQ"] = project_info.info("SELECTED_FREQ")
     project_data["OUTPUT"] = project_info.info("OUTPUT")
+    project_data["WIZARD_VERSION"] = WIZARD_VERSION
+    project_data["PRESET"] = project_info.info("PRESET")
+    project_data["PROJECT_HW_PATH"] = relpath.relpath(project_info.info("PROJECT_HW_PATH"), directory)
     return pickle.dumps(project_data)
-
-def createBertosProject(project_info, edit=False):
-    directory = project_info.info("PROJECT_PATH")
-    sources_dir = project_info.info("SOURCES_PATH")
-    old_sources_dir = project_info.info("OLD_SOURCES_PATH")
-    if not edit:
-        if os.path.isdir(directory):
-            shutil.rmtree(directory, True)        
-        os.makedirs(directory)
-    # Write the project file
-    f = open(directory + "/project.bertos", "w")
-    f.write(projectFileGenerator(project_info))
-    f.close()
-    # Destination source dir
-    srcdir = directory + "/bertos"
-    if not edit:
-        # If not in editing mode it copies all the bertos sources in the /bertos subdirectory of the project
-        shutil.rmtree(srcdir, True)
-        copytree.copytree(sources_dir + "/bertos", srcdir, ignore_list=const.IGNORE_LIST)
-    elif old_sources_dir:
-        # If in editing mode it merges the current bertos sources with the selected ones
-        # TODO: implement the three way merge algotihm
-        #
-        mergeSources(srcdir, sources_dir, old_sources_dir)
-    # Destination makefile
-    makefile = directory + "/Makefile"
-    makefile = open(os.path.join(const.DATA_DIR, "mktemplates/Makefile"), 'r').read()
-    makefile = makefileGenerator(project_info, makefile)
-    open(directory + "/Makefile", "w").write(makefile)
-    # Destination project dir
-    prjdir = directory + "/" + os.path.basename(directory)
-    if not edit:
-        shutil.rmtree(prjdir, True)
-        os.mkdir(prjdir)
-    # Destination hw files
-    hwdir = prjdir + "/hw"
-    if not edit:
-        shutil.rmtree(hwdir, True)
-        os.mkdir(hwdir)
-    # Copy all the hw files
-    for module, information in project_info.info("MODULES").items():
-        for hwfile in information["hw"]:
-            string = open(sources_dir + "/" + hwfile, "r").read()
-            hwfile_path = hwdir + "/" + os.path.basename(hwfile)
-            if not edit or not os.path.exists(hwfile_path):
-                # If not in editing mode it copies all the hw files. If in
-                # editing mode it copies only the files that don't exist yet
-                open(hwdir + "/" + os.path.basename(hwfile), "w").write(string)
-    # Destination configurations files
-    cfgdir = prjdir + "/cfg"
-    if not edit:
-        shutil.rmtree(cfgdir, True)
-        os.mkdir(cfgdir)
-    # Set properly the autoenabled parameters
-    for module, information in project_info.info("MODULES").items():
-        if "configuration" in information and information["configuration"] != "":
-            configurations = project_info.info("CONFIGURATIONS")
-            configuration = configurations[information["configuration"]]
-            for start, parameter in configuration["paramlist"]:
-                if "type" in configuration[parameter]["informations"] and configuration[parameter]["informations"]["type"] == "autoenabled":
-                    configuration[parameter]["value"] = "1" if information["enabled"] else "0"
-            project_info.setInfo("CONFIGURATIONS", configurations)
-    # Copy all the configuration files
-    for configuration, information in project_info.info("CONFIGURATIONS").items():
-        string = open(sources_dir + "/" + configuration, "r").read()
-        for start, parameter in information["paramlist"]:
-            infos = information[parameter]
-            value = infos["value"]
-            if "unsigned" in infos["informations"] and infos["informations"]["unsigned"]:
-                value += "U"
-            if "long" in infos["informations"] and infos["informations"]["long"]:
-                value += "L"
-            string = sub(string, parameter, value)
-        f = open(cfgdir + "/" + os.path.basename(configuration), "w")
-        f.write(string)
-        f.close()
-    if not edit:
-        # Destination user mk file (only on project creation)
-        makefile = open(os.path.join(const.DATA_DIR, "mktemplates/template.mk"), "r").read()
-        makefile = mkGenerator(project_info, makefile)
-        open(prjdir + "/" + os.path.basename(prjdir) + ".mk", "w").write(makefile)
-    # Destination wizard mk file
-    makefile = open(os.path.join(const.DATA_DIR, "mktemplates/template_wiz.mk"), "r").read()
-    makefile = mkGenerator(project_info, makefile)
-    open(prjdir + "/" + os.path.basename(prjdir) + "_wiz.mk", "w").write(makefile)
-    # Destination main.c file
-    if not edit:
-        main = open(os.path.join(const.DATA_DIR, "srctemplates/main.c"), "r").read()
-        open(prjdir + "/main.c", "w").write(main)
-    # Files for selected plugins
-    relevants_files = {}
-    for plugin in project_info.info("OUTPUT"):
-        module = loadPlugin(plugin)
-        relevants_files[plugin] = module.createProject(project_info)
-    project_info.setInfo("RELEVANT_FILES", relevants_files)
 
 def loadPlugin(plugin):
     """
     Returns the given plugin module.
     """
     return getattr(__import__("plugins", {}, {}, [plugin]), plugin)
-    
-def mkGenerator(project_info, makefile):
+
+def versionFileGenerator(project_info, version_file):
+    version = bertosVersion(project_info.info("BERTOS_PATH"))
+    return version_file.replace('$version', version)
+
+def userMkGeneratorFromPreset(project_info):
+    project_name = project_info.info("PROJECT_NAME")
+    preset_path = project_info.info("PRESET_PATH")
+    preset_name = project_info.info("PRESET_NAME")
+    preset_src_dir = project_info.info("PRESET_SRC_PATH")
+    makefile = open(os.path.join(preset_path, preset_src_dir, "%s_user.mk" %preset_name), 'r').read()
+    destination = os.path.join(project_info.prjdir, "%s_user.mk" %project_info.info("PROJECT_NAME"))
+    # Temporary code.
+    # TODO: write it using regular expressions to secure this function
+    makefile = makefile.replace(preset_name + "_", project_name + "_")
+    open(destination, "w").write(makefile)
+
+def userMkGenerator(project_info):
+    makefile = open(os.path.join(const.DATA_DIR, "mktemplates/template_user.mk"), "r").read()
+    destination = os.path.join(project_info.prjdir, os.path.basename(project_info.prjdir) + "_user.mk")
+    # Deadly performances loss was here :(
+    mk_data = {}
+    mk_data["$pname"] = os.path.basename(project_info.info("PROJECT_PATH"))
+    mk_data["$ppath"] = relpath.relpath(project_info.info("PROJECT_SRC_PATH"), project_info.info("PROJECT_PATH"))
+    mk_data["$main"] = "/".join(["$(%s_SRC_PATH)" %project_info.info("PROJECT_NAME"), "main.c"])
+    for key in mk_data:
+        makefile = makefile.replace(key, mk_data[key])
+    open(destination, "w").write(makefile)
+
+def mkGenerator(project_info):
     """
     Generates the mk file for the current project.
     """
+    makefile = open(os.path.join(const.DATA_DIR, "mktemplates/template.mk"), "r").read()
+    destination = os.path.join(project_info.prjdir, os.path.basename(project_info.prjdir) + ".mk")
     mk_data = {}
-    mk_data["$pname"] = os.path.basename(project_info.info("PROJECT_PATH"))
+    mk_data["$pname"] = project_info.info("PROJECT_NAME")
+    mk_data["$ppath"] = relpath.relpath(project_info.info("PROJECT_SRC_PATH"), project_info.info("PROJECT_PATH"))
     mk_data["$cpuclockfreq"] = project_info.info("SELECTED_FREQ")
     cpu_mk_parameters = []
     for key, value in project_info.info("CPU_INFOS").items():
@@ -258,20 +195,24 @@ def mkGenerator(project_info, makefile):
     mk_data["$csrc"], mk_data["$pcsrc"], mk_data["$cppasrc"], mk_data["$cxxsrc"], mk_data["$asrc"], mk_data["$constants"] = csrcGenerator(project_info)
     mk_data["$prefix"] = replaceSeparators(project_info.info("TOOLCHAIN")["path"].split("gcc")[0])
     mk_data["$suffix"] = replaceSeparators(project_info.info("TOOLCHAIN")["path"].split("gcc")[1])
-    mk_data["$main"] = os.path.basename(project_info.info("PROJECT_PATH")) + "/main.c"
+    mk_data["$hwpath"] = relpath.relpath(project_info.info("PROJECT_HW_PATH"), project_info.info("PROJECT_PATH"))
     for key in mk_data:
-        while makefile.find(key) != -1:
-            makefile = makefile.replace(key, mk_data[key])
-    return makefile
+        makefile = makefile.replace(key, mk_data[key])
+    open(destination, "w").write(makefile)
 
-def makefileGenerator(project_info, makefile):
+def makefileGenerator(project_info):
     """
     Generate the Makefile for the current project.
     """
+    makefile = open(os.path.join(const.DATA_DIR, "mktemplates/Makefile"), "r").read()
+    destination = os.path.join(project_info.maindir, "Makefile")
     # TODO write a general function that works for both the mk file and the Makefile
-    while makefile.find("$pname") != -1:
-        makefile = makefile.replace("$pname", os.path.basename(project_info.info("PROJECT_PATH")))
-    return makefile
+    mk_data = {}
+    mk_data["$pname"] = project_info.info("PROJECT_NAME")
+    mk_data["$ppath"] = relpath.relpath(project_info.info("PROJECT_SRC_PATH"), project_info.info("PROJECT_PATH"))
+    for key in mk_data:
+        makefile = makefile.replace(key, mk_data[key])
+    open(destination, "w").write(makefile)
 
 def csrcGenerator(project_info):
     modules = project_info.info("MODULES")
@@ -297,7 +238,7 @@ def csrcGenerator(project_info):
         dependency_files = set([])
         # assembly sources
         asm_files = set([])
-        hwdir = os.path.basename(project_info.info("PROJECT_PATH")) + "/hw" 
+        hwdir = os.path.basename(project_info.info("PROJECT_PATH")) + "/hw"
         if information["enabled"]:
             if "constants" in information:
                 constants.update(information["constants"])
@@ -348,29 +289,41 @@ def findModuleFiles(module, project_info):
     cfiles = []
     sfiles = []
     # .c files related to the module and the cpu architecture
-    for filename, path in findDefinitions(module + ".c", project_info) + \
-            findDefinitions(module + "_" + project_info.info("CPU_INFOS")["TOOLCHAIN"] + ".c", project_info):
-        path = path.replace(project_info.info("SOURCES_PATH") + os.sep, "")
+    for filename, path in project_info.searchFiles(module + ".c"):
+        path = path.replace(project_info.info("BERTOS_PATH") + os.sep, "")
         path = replaceSeparators(path)
         cfiles.append(path + "/" + filename)
     # .s files related to the module and the cpu architecture
-    for filename, path in findDefinitions(module + ".s", project_info) + \
-            findDefinitions(module + "_" + project_info.info("CPU_INFOS")["TOOLCHAIN"] + ".s", project_info) + \
-            findDefinitions(module + ".S", project_info) + \
-            findDefinitions(module + "_" + project_info.info("CPU_INFOS")["TOOLCHAIN"] + ".S", project_info):
-        path = path.replace(project_info.info("SOURCES_PATH") + os.sep, "")
+    for filename, path in project_info.searchFiles(module + ".s") + \
+            project_info.searchFiles(module + ".S"):
+        path = path.replace(project_info.info("BERTOS_PATH") + os.sep, "")
         path = replaceSeparators(path)
         sfiles.append(path + "/" + filename)
     # .c and .s files related to the module and the cpu tags
-    for tag in project_info.info("CPU_INFOS")["CPU_TAGS"]:
-        for filename, path in findDefinitions(module + "_" + tag + ".c", project_info):
-            path = path.replace(project_info.info("SOURCES_PATH") + os.sep, "")
+    tags = project_info.info("CPU_INFOS")["CPU_TAGS"]
+
+    # Awful, but secure check for version
+    # TODO: split me in a method/function
+    try:
+        version_string = bertosVersion(project_info.info("BERTOS_PATH"))
+        version_list = [int(i) for i in version_string.split()[1].split('.')]
+    except ValueError:
+        # If the version file hasn't a valid version number assume it's an older
+        # project.
+        version_list = [0, 0]
+    if version_list < [2, 5]:
+        # For older versions of BeRTOS add the toolchain to the tags
+        tags.append(project_info.info("CPU_INFOS")["TOOLCHAIN"])
+
+    for tag in tags:
+        for filename, path in project_info.searchFiles(module + "_" + tag + ".c"):
+            path = path.replace(project_info.info("BERTOS_PATH") + os.sep, "")
             if os.sep != "/":
                 path = replaceSeparators(path)
             cfiles.append(path + "/" + filename)
-        for filename, path in findDefinitions(module + "_" + tag + ".s", project_info) + \
-                findDefinitions(module + "_" + tag + ".S", project_info):
-            path = path.replace(project_info.info("SOURCES_PATH") + os.sep, "")
+        for filename, path in project_info.searchFiles(module + "_" + tag + ".s") + \
+                project_info.searchFiles(module + "_" + tag + ".S"):
+            path = path.replace(project_info.info("BERTOS_PATH") + os.sep, "")
             path = replaceSeparators(path)
             sfiles.append(path + "/" + filename)
     return cfiles, sfiles
@@ -380,8 +333,7 @@ def replaceSeparators(path):
     Replace the separators in the given path with unix standard separator.
     """
     if os.sep != "/":
-        while path.find(os.sep) != -1:
-            path = path.replace(os.sep, "/")
+        path = path.replace(os.sep, "/")
     return path
 
 def getSystemPath():
@@ -429,25 +381,6 @@ def getToolchainName(toolchain_info):
     name = "GCC " + toolchain_info["version"] + " - " + toolchain_info["target"].strip()
     return name
 
-def loadSourceTree(project):
-    fileList = [f for f in os.walk(project.info("SOURCES_PATH"))]
-    project.setInfo("FILE_LIST", fileList)
-
-def findDefinitions(ftype, project):
-    L = project.info("FILE_LIST")
-    definitions = []
-    for element in L:
-        for filename in element[2]:
-            if fnmatch.fnmatch(filename, ftype):
-                definitions.append((filename, element[0]))
-    return definitions
-
-def loadCpuInfos(project):
-    cpuInfos = []
-    for definition in findDefinitions(const.CPU_DEFINITION, project):
-        cpuInfos.append(getInfos(definition))
-    return cpuInfos
-
 def getTagSet(cpu_info):
     tag_set = set([])
     for cpu in cpu_info:
@@ -455,7 +388,7 @@ def getTagSet(cpu_info):
         tag_set |= set(cpu["CPU_TAGS"])
         tag_set |= set([cpu["TOOLCHAIN"]])
     return tag_set
-        
+
 
 def getInfos(definition):
     D = {}
@@ -610,59 +543,6 @@ def getDefinitionBlocks(text):
         start = match.start()
         block.append(([comment], define, start))
     return block
-
-def loadModuleData(project, edit=False):
-    module_info_dict = {}
-    list_info_dict = {}
-    configuration_info_dict = {}
-    file_dict = {}
-    for filename, path in findDefinitions("*.h", project) + findDefinitions("*.c", project) + findDefinitions("*.s", project) + findDefinitions("*.S", project):
-        comment_list = getCommentList(open(path + "/" + filename, "r").read())
-        if len(comment_list) > 0:
-            module_info = {}
-            configuration_info = {}
-            try:
-                to_be_parsed, module_dict = loadModuleDefinition(comment_list[0])
-            except ParseError, err:
-                raise DefineException.ModuleDefineException(path, err.line_number, err.line)
-            for module, information in module_dict.items():
-                if "depends" not in information:
-                    information["depends"] = ()
-                information["depends"] += (filename.split(".")[0],)
-                information["category"] = os.path.basename(path)
-                if "configuration" in information and len(information["configuration"]):
-                    configuration = module_dict[module]["configuration"]
-                    try:
-                        configuration_info[configuration] = loadConfigurationInfos(project.info("SOURCES_PATH") + "/" + configuration)
-                    except ParseError, err:
-                        raise DefineException.ConfigurationDefineException(project.info("SOURCES_PATH") + "/" + configuration, err.line_number, err.line)
-                    if edit:
-                        try:
-                            path = os.path.basename(project.info("PROJECT_PATH"))
-                            directory = project.info("PROJECT_PATH")
-                            user_configuration = loadConfigurationInfos(directory + "/" + configuration.replace("bertos", path))
-                            configuration_info[configuration] = updateConfigurationValues(configuration_info[configuration], user_configuration)
-                        except ParseError, err:
-                            raise DefineException.ConfigurationDefineException(directory + "/" + configuration.replace("bertos", path))
-            module_info_dict.update(module_dict)
-            configuration_info_dict.update(configuration_info)
-            if to_be_parsed:
-                try:
-                    list_dict = loadDefineLists(comment_list[1:])
-                    list_info_dict.update(list_dict)
-                except ParseError, err:
-                    raise DefineException.EnumDefineException(path, err.line_number, err.line)
-    for filename, path in findDefinitions("*_" + project.info("CPU_INFOS")["TOOLCHAIN"] + ".h", project):
-        comment_list = getCommentList(open(path + "/" + filename, "r").read())
-        list_info_dict.update(loadDefineLists(comment_list))
-    for tag in project.info("CPU_INFOS")["CPU_TAGS"]:
-        for filename, path in findDefinitions("*_" + tag + ".h", project):
-            comment_list = getCommentList(open(path + "/" + filename, "r").read())
-            list_info_dict.update(loadDefineLists(comment_list))
-    project.setInfo("MODULES", module_info_dict)
-    project.setInfo("LISTS", list_info_dict)
-    project.setInfo("CONFIGURATIONS", configuration_info_dict)
-    project.setInfo("FILES", file_dict)
 
 def formatParamNameValue(text):
     """

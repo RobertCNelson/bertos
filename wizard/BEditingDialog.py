@@ -39,11 +39,14 @@ import os
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 
-from bertos_utils import loadBertosProject, bertosVersion, getToolchainName, createBertosProject
+from bertos_utils import bertosVersion, getToolchainName
 from BToolchainPage import BToolchainPage
 from BVersionPage import BVersionPage
+
+from BProject import BProject
+
 import qvariant_converter
-import BModulePage
+from BModulePage import BModulePage
 import bertos_utils
 
 class BEditingDialog(QDialog):
@@ -57,18 +60,18 @@ class BEditingDialog(QDialog):
     
     def setupUi(self):
         layout = QVBoxLayout()
-        self.module_page = BModulePage.BModulePage()
+        self.module_page = BModulePage()
         layout.addWidget(self.module_page)
-	frequency_layout = QHBoxLayout()
-	frequency_layout.addWidget(QLabel(self.tr("CPU frequency")))
-	self.cpu_frequency_spinbox = QDoubleSpinBox()
-	self.cpu_frequency_spinbox.setSuffix("Hz")
-	self.cpu_frequency_spinbox.setRange(1, 1000000000)
-	self.cpu_frequency_spinbox.setSingleStep(1000)
-	self.cpu_frequency_spinbox.setDecimals(0)
-	frequency_layout.addWidget(self.cpu_frequency_spinbox)
-	frequency_layout.addStretch()
-	layout.addLayout(frequency_layout)
+        frequency_layout = QHBoxLayout()
+        frequency_layout.addWidget(QLabel(self.tr("CPU frequency")))
+        self.cpu_frequency_spinbox = QDoubleSpinBox()
+        self.cpu_frequency_spinbox.setSuffix("Hz")
+        self.cpu_frequency_spinbox.setRange(1, 1000000000)
+        self.cpu_frequency_spinbox.setSingleStep(1000)
+        self.cpu_frequency_spinbox.setDecimals(0)
+        frequency_layout.addWidget(self.cpu_frequency_spinbox)
+        frequency_layout.addStretch()
+        layout.addLayout(frequency_layout)
         button_layout = QHBoxLayout()
         self.advanced_button = QToolButton()
         self.setupMenu()
@@ -115,7 +118,7 @@ class BEditingDialog(QDialog):
             dialog.toolchain_page.setProjectInfo("TOOLCHAIN", toolchain)
     
     def changeBertosVersion(self):
-	current_version = self.module_page.projectInfo("SOURCES_PATH")
+	current_version = self.module_page.projectInfo("BERTOS_PATH")
         dialog = BVersionDialog()
         if dialog.exec_():
             version = qvariant_converter.getString(dialog.version_page.currentItem().data(Qt.UserRole))
@@ -125,33 +128,38 @@ class BEditingDialog(QDialog):
                 self.tr("Changing the BeRTOS version will destroy all the modification done on the BeRTOS sources"),
                 QMessageBox.Ok | QMessageBox.Cancel
             ) == QMessageBox.Ok:
-                qApp.setOverrideCursor(QCursor(Qt.WaitCursor))
-                dialog.version_page.setProjectInfo("SOURCES_PATH", version)
-                dialog.version_page.setProjectInfo("OLD_SOURCES_PATH", current_version)
-                enabled_modules = bertos_utils.enabledModules(dialog.version_page.project())
-                old_configuration = dialog.version_page.projectInfo("CONFIGURATIONS")
-                bertos_utils.loadSourceTree(dialog.version_page.project())
-                bertos_utils.loadModuleData(dialog.version_page.project())
-                new_configuration = dialog.version_page.projectInfo("CONFIGURATIONS")
-                merged_configuration = {}
-                for conf in new_configuration:
-                    if conf in old_configuration:
-                        configuration = bertos_utils.updateConfigurationValues(new_configuration[conf], old_configuration[conf])
-                    else:
-                        configuration = new_configuration[conf]
-                    merged_configuration[conf] = configuration
-                dialog.version_page.setProjectInfo("CONFIGURATIONS", merged_configuration)
-                bertos_utils.setEnabledModules(dialog.version_page.project(), enabled_modules)
-                self.module_page.fillModuleTree()
-                qApp.restoreOverrideCursor()
+                try:
+                    qApp.setOverrideCursor(QCursor(Qt.WaitCursor))
+                    dialog.version_page.setProjectInfo("BERTOS_PATH", version)
+                    dialog.version_page.setProjectInfo("OLD_BERTOS_PATH", current_version)
+                    enabled_modules = bertos_utils.enabledModules(dialog.version_page.project)
+                    old_configuration = dialog.version_page.projectInfo("CONFIGURATIONS")
+                    dialog.version_page.project.loadSourceTree()
+                    QApplication.instance().project.reloadCpuInfo()
+                    QApplication.instance().project.loadModuleData()
+                    new_configuration = dialog.version_page.projectInfo("CONFIGURATIONS")
+                    merged_configuration = {}
+                    for conf in new_configuration:
+                        if conf in old_configuration:
+                            configuration = bertos_utils.updateConfigurationValues(new_configuration[conf], old_configuration[conf])
+                        else:
+                            configuration = new_configuration[conf]
+                        merged_configuration[conf] = configuration
+                    dialog.version_page.setProjectInfo("CONFIGURATIONS", merged_configuration)
+                    dialog.version_page.project.setEnabledModules(enabled_modules)
+                    self.module_page.fillModuleTree()
+                finally:
+                    qApp.restoreOverrideCursor()
             else:
                 # Rollback version to the previous selected one.
-                dialog.version_page.setProjectInfo("SOURCES_PATH", current_version)
+                dialog.version_page.setProjectInfo("BERTOS_PATH", current_version)
 
     def apply(self):
-        qApp.setOverrideCursor(QCursor(Qt.WaitCursor))
-        createBertosProject(self.module_page.project(), edit=True)
-        qApp.restoreOverrideCursor()
+        try:
+            qApp.setOverrideCursor(QCursor(Qt.WaitCursor))
+            QApplication.instance().project.createBertosProject()
+        finally:
+            qApp.restoreOverrideCursor()
         self.accept()
 
     def toolchains(self):
@@ -167,10 +175,10 @@ class BEditingDialog(QDialog):
         return self.module_page.versions()
 
     def currentVersion(self):
-        return self.module_page.projectInfo("SOURCES_PATH")
+        return self.module_page.projectInfo("BERTOS_PATH")
     
     def setCurrentVersion(self, version):
-        self.module_page.setProjectInfo("SOURCES_PATH", version)
+        self.module_page.setProjectInfo("BERTOS_PATH", version)
 
 class BToolchainDialog(QDialog):
     def __init__(self):
@@ -206,7 +214,7 @@ class BVersionDialog(QDialog):
         QDialog.__init__(self)
 	self.setWindowIcon(QIcon(":/images/appicon.png"))
         layout = QVBoxLayout()
-        version_page = BVersionPage()
+        version_page = BVersionPage(edit=True)
         version_page.reloadData()
 	self.version_page = version_page
         layout.addWidget(version_page)
@@ -220,7 +228,7 @@ class BVersionDialog(QDialog):
         layout.addLayout(button_layout)
         self.setLayout(layout)
         self.connect(ok_button, SIGNAL("clicked()"), self.accept)
-        current_version = version_page.projectInfo("SOURCES_PATH")
+        current_version = version_page.projectInfo("BERTOS_PATH")
         self.setWindowTitle(self.tr("Change BeRTOS version"))
 
 
@@ -231,7 +239,7 @@ def main():
         print "Invalid usage: use <command> project_file"
         sys.exit()
     app = QApplication([])
-    app.project = loadBertosProject(project_file)
+    app.project = BProject(project_file)
     app.settings = QSettings("Develer", "Bertos Configurator")
     dialog = BEditingDialog()
     dialog.show()

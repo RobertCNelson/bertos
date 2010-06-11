@@ -47,14 +47,23 @@
 #include <io/arm.h>
 
 
+#define FLASH_PAGE_SIZE FLASH_PAGE_SIZE_BYTES
+
 /**
  * Define data type to manage page and memory address.
  */
-typedef uint32_t arm_page_t;
-typedef uint32_t arm_page_addr_t;
+typedef uint32_t page_t;
+typedef uint32_t page_addr_t;
+
+struct Flash;
 
 /**
  * FlashAt91 KFile context structure.
+ *
+ * DEPREACTED STRUCTURE!
+ * Use EmbFlash instead
+ *
+ * \{
  */
 typedef struct FlashAt91
 {
@@ -71,32 +80,26 @@ typedef struct FlashAt91
 	/**
 	 * Current buffered page.
 	 */
-	arm_page_t curr_page;
+	page_t curr_page;
 
 	/**
 	 * Temporary buffer cointaing data block to
 	 * write on flash.
 	 */
 	uint8_t page_buf[FLASH_PAGE_SIZE_BYTES];
-
-
 } FlashAt91;
+/* \} */
+
+void flash_hw_init(struct Flash *fd);
 
 /**
- * ID for FlashAt91
+ * WARNING!
+ * This function is DEPRECADED!
+ * use the emb_flash module instead.
  */
-#define KFT_FLASHAT91 MAKE_ID('F', 'A', '9', '1')
-
-/**
- * Convert + ASSERT from generic KFile to FlashAt91.
- */
-INLINE FlashAt91 * FLASHAT91_CAST(KFile *fd)
+INLINE void flash_at91_init(struct FlashAt91 *fd)
 {
-	ASSERT(fd->_type == KFT_FLASHAT91);
-	return (FlashAt91 *)fd;
+	flash_hw_init((struct Flash *)fd);
 }
 
-
-void flash_at91_init(FlashAt91 *fd);
-
-#endif
+#endif /* DRV_FLASH_ARM_H */

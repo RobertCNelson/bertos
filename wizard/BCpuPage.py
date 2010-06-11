@@ -47,7 +47,7 @@ class BCpuPage(BWizardPage):
     
     def __init__(self):
         BWizardPage.__init__(self, UI_LOCATION + "/cpu_select.ui")
-        self.setTitle(self.tr("Select the CPU"))
+        self.setTitle(self.tr("Select the CPU on your board"))
         self.freq_modified = False
     
     ## Overloaded QWizardPage methods ##
@@ -95,30 +95,35 @@ class BCpuPage(BWizardPage):
         self.pageContent.cpuList.setSortingEnabled(True)
         self.pageContent.frequencyLabel.setVisible(False)
         self.pageContent.frequencySpinBox.setVisible(False)
+        preset_advanced = self.projectInfo("PRESET_ADVANCED_CONFIG")
+        if preset_advanced:
+            self.pageContent.cpuList.setEnabled(False)
 
     def connectSignals(self):
         """
         Overload of the BWizardPage connectSignals method.
         """
-        self.connect(self.pageContent.cpuList, SIGNAL("itemSelectionChanged()"), self.rowChanged)
+        self.connect(self.pageContent.cpuList, SIGNAL("currentItemChanged(QListWidgetItem *, QListWidgetItem*)"), self.rowChanged)
         self.connect(self.pageContent.frequencySpinBox, SIGNAL("editingFinished()"), self.freqChanged)
 
-    def reloadData(self):
+    def reloadData(self, previous_id=None):
         """
         Overload of the BWizardPage reloadData method.
         """
-        QApplication.instance().setOverrideCursor(Qt.WaitCursor)
-        bertos_utils.loadSourceTree(self.project())
-        self.populateCpuList()
-        cpu_name = self.projectInfo("CPU_NAME")
-        selected_freq = self.projectInfo("SELECTED_FREQ")
-        self.setupUi()
-        if cpu_name:
-            self.selectItem(cpu_name)
-            if selected_freq:
-                self.setFrequency(selected_freq)
-                self.freq_modified = True
-        QApplication.instance().restoreOverrideCursor()
+        try:
+            QApplication.instance().setOverrideCursor(Qt.WaitCursor)
+            self.project.loadSourceTree()
+            self.populateCpuList()
+            cpu_name = self.projectInfo("CPU_NAME")
+            selected_freq = self.projectInfo("SELECTED_FREQ")
+            self.setupUi()
+            if cpu_name:
+                self.selectItem(cpu_name)
+                if selected_freq:
+                    self.setFrequency(selected_freq)
+                    self.freq_modified = True
+        finally:
+            QApplication.instance().restoreOverrideCursor()
         self.emit(SIGNAL("completeChanged()"))
 
     ####
@@ -129,17 +134,18 @@ class BCpuPage(BWizardPage):
         """
         Slot called when the user select an entry from the cpu list.
         """
-        description = qvariant_converter.getDict(self.pageContent.cpuList.currentItem().data(Qt.UserRole))["CPU_DESC"]
-        description = qvariant_converter.getStringList(description)
-        if not self.freq_modified:
-            # Retrieve the default cpu frequency when the value isn't already modified
-            current_freq = qvariant_converter.getDict(self.pageContent.cpuList.currentItem().data(Qt.UserRole))["CPU_DEFAULT_FREQ"]
-            current_freq = qvariant_converter.getString(current_freq)
-            current_freq = long(current_freq.replace("U", "").replace("L", ""))
-            self.pageContent.frequencySpinBox.setValue(long(current_freq))
-        self.pageContent.descriptionLabel.setText("<br>".join(description))
-        self.pageContent.descriptionLabel.setVisible(True)
-        self.emit(SIGNAL("completeChanged()"))
+        if self.pageContent.cpuList.currentItem():
+            description = qvariant_converter.getDict(self.pageContent.cpuList.currentItem().data(Qt.UserRole))["CPU_DESC"]
+            description = qvariant_converter.getStringList(description)
+            if not self.freq_modified:
+                # Retrieve the default cpu frequency when the value isn't already modified
+                current_freq = qvariant_converter.getDict(self.pageContent.cpuList.currentItem().data(Qt.UserRole))["CPU_DEFAULT_FREQ"]
+                current_freq = qvariant_converter.getString(current_freq)
+                current_freq = long(current_freq.replace("U", "").replace("L", ""))
+                self.pageContent.frequencySpinBox.setValue(long(current_freq))
+            self.pageContent.descriptionLabel.setText("<br>".join(description))
+            self.pageContent.descriptionLabel.setVisible(True)
+            self.emit(SIGNAL("completeChanged()"))
     
     def freqChanged(self):
         """
@@ -156,7 +162,7 @@ class BCpuPage(BWizardPage):
         """
         self.pageContent.cpuList.clear()
         self.pageContent.cpuList.setCurrentItem(None)
-        infos = bertos_utils.loadCpuInfos(self.project())
+        infos = self.project.getCpuInfos()
         tag_list = bertos_utils.getTagSet(infos)
         # Create, fill and store the dict with the tags
         tag_dict = {}

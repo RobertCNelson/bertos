@@ -37,9 +37,13 @@ import os
 import collections
 
 from BWizardPage import *
+from BCreationPage import BCreationPage
+
 import BToolchainSearch
 import bertos_utils
 import qvariant_converter
+
+from toolchain_manager import ToolchainManager
 
 from const import *
 
@@ -52,8 +56,9 @@ class BToolchainPage(BWizardPage):
     def __init__(self):
         BWizardPage.__init__(self, UI_LOCATION + "/toolchain_select.ui")
         self.setTitle(self.tr("Select toolchain"))
-        self._validation_process = None
+        self.setSubTitle(self.tr("You can look for more toolchains in your system by pressing the \"Search\" button, or manually add them with the \"+\" button"))
         self._valid_items = []
+        self._toolchain_manager = ToolchainManager()
 
     ## Overloaded QWizardPage methods. ##
 
@@ -67,6 +72,16 @@ class BToolchainPage(BWizardPage):
             return True
         else:
             return False
+
+    def nextId(self):
+        """
+        Overload of the QWizardPage nextId method.
+        """
+        # Route to Output page if it's a predefined easy project.
+        if self.projectInfo("PROJECT_FROM_PRESET") and self.projectInfo("BASE_MODE"):
+            return self.wizard().pageIndex(BCreationPage)
+        else:
+            return QWizardPage.nextId(self)
 
     ####
 
@@ -82,21 +97,22 @@ class BToolchainPage(BWizardPage):
         """
         Connects the signals with the related slots.
         """
-        self.connect(self.pageContent.toolchainList, SIGNAL("itemSelectionChanged()"), self.selectionChanged)
+        self.connect(self.pageContent.toolchainList, SIGNAL("currentItemChanged(QListWidgetItem *, QListWidgetItem*)"), self.selectionChanged)
         self.connect(self.pageContent.addButton, SIGNAL("clicked()"), self.addToolchain)
         self.connect(self.pageContent.removeButton, SIGNAL("clicked()"), self.removeToolchain)
         self.connect(self.pageContent.searchButton, SIGNAL("clicked()"), self.searchToolchain)
         self.connect(self.pageContent.checkButton, SIGNAL("clicked()"), self.validateAllToolchains)
 
-    def reloadData(self):
+    def reloadData(self, previous_id=None):
         """
         Overload of the BWizard reloadData method.
         """
-        self._clearList()
-        self.setupUi()
-        self._populateToolchainList()
-        if len(self._valid_items) == 1:
-            self.pageContent.toolchainList.setCurrentItem(self._valid_items[0])
+        if previous_id is None or previous_id < self.wizard().currentId():
+            self._clearList()
+            self.setupUi()
+            self._populateToolchainList()
+            if len(self._valid_items) >= 1:
+                self.pageContent.toolchainList.setCurrentItem(self._valid_items[0])
 
     ####
 
@@ -126,9 +142,7 @@ class BToolchainPage(BWizardPage):
             item = QListWidgetItem(sel_toolchain)
             item.setData(Qt.UserRole, qvariant_converter.convertStringDict({"path": sel_toolchain}))
             self.pageContent.toolchainList.addItem(item)
-            toolchains = self.toolchains()
-            toolchains[sel_toolchain] = False
-            self.setToolchains(toolchains)
+            self._toolchain_manager.addToolchain(sel_toolchain)
 
     def removeToolchain(self):
         """
@@ -137,9 +151,7 @@ class BToolchainPage(BWizardPage):
         if self.pageContent.toolchainList.currentRow() != -1:
             item = self.pageContent.toolchainList.takeItem(self.pageContent.toolchainList.currentRow())
             toolchain = qvariant_converter.getStringDict(item.data(Qt.UserRole))["path"]
-            toolchains = self.toolchains()
-            del toolchains[toolchain]
-            self.setToolchains(toolchains)
+            self._toolchain_manager.removeToolchain(toolchain)
 
     def searchToolchain(self):
         """
@@ -155,10 +167,12 @@ class BToolchainPage(BWizardPage):
         Slot called when the user clicks on the validate button. It starts the
         toolchain validation procedure for all the toolchains.
         """
-        QApplication.instance().setOverrideCursor(Qt.WaitCursor)
-        for i in range(self.pageContent.toolchainList.count()):
-            self.validateToolchain(i)
-        QApplication.instance().restoreOverrideCursor()
+        try:
+            QApplication.instance().setOverrideCursor(Qt.WaitCursor)
+            for i in range(self.pageContent.toolchainList.count()):
+                self.validateToolchain(i)
+        finally:
+            QApplication.instance().restoreOverrideCursor()
 
     ####
 
@@ -166,21 +180,21 @@ class BToolchainPage(BWizardPage):
         """
         Fills the toolchain list with the toolchains stored in the QSettings.
         """
-        toolchains = self.toolchains()
-        if os.name == "nt":
-            import winreg_importer
-            stored_toolchains = winreg_importer.getBertosToolchains()
-            for toolchain in stored_toolchains:
-                toolchains[toolchain] = True
+        self.pageContent.toolchainList.clear()
+        self._valid_items = []
+        toolchains = self._toolchain_manager.predefined_toolchains + self._toolchain_manager.toolchains
         sel_toolchain = self.projectInfo("TOOLCHAIN")
-        for key, value in toolchains.items():
+        for key, value in toolchains:
             if os.path.exists(key):
                 item = QListWidgetItem(key)
-                item.setData(Qt.UserRole, qvariant_converter.convertStringDict({"path": key}))
+                item_data = {"path":key}
+                if value:
+                    item_data.update(value)
+                item.setData(Qt.UserRole, qvariant_converter.convertStringDict(item_data))
                 self.pageContent.toolchainList.addItem(item)
                 if sel_toolchain and sel_toolchain["path"] == key:
                     self.pageContent.toolchainList.setCurrentItem(item)
-                if value:
+                if value is not None:
                     self.validateToolchain(self.pageContent.toolchainList.row(item))
 
     def currentToolchain(self):
@@ -201,16 +215,12 @@ class BToolchainPage(BWizardPage):
         dir_list = self.searchDirList()
         if self.pathSearch():
             dir_list += [element for element in bertos_utils.getSystemPath()]
+        _toolchain_dict = self._toolchain_manager.storedToolchainDict()
         toolchain_list = bertos_utils.findToolchains(dir_list)
-        stored_toolchains = self.toolchains()
-        for element in toolchain_list:
-            if not element in stored_toolchains:
-                item = QListWidgetItem(element)
-                item.setData(Qt.UserRole, qvariant_converter.convertStringDict({"path": element}))
-                self.pageContent.toolchainList.addItem(item)
-                stored_toolchains[element] = False
-        self.setToolchains(stored_toolchains)
-        self.showMessage(self.tr("Toolchain search result."), self.tr("%1 toolchains founded").arg(len(stored_toolchains)))
+        for toolchain in toolchain_list:
+            self._toolchain_manager.addToolchain(toolchain, _toolchain_dict.get(toolchain, False))
+        self._populateToolchainList()
+        self.showMessage(self.tr("Toolchain search result."), self.tr("%1 toolchains found").arg(len(toolchain_list)))
 
     def _validItem(self, index, infos):
         """
@@ -241,46 +251,19 @@ class BToolchainPage(BWizardPage):
         Toolchain validation procedure.
         """
         filename = qvariant_converter.getStringDict(self.pageContent.toolchainList.item(i).data(Qt.UserRole))["path"]
-        valid = False
-        info = {}
-        # Check for the other tools of the toolchain
-        for tool in TOOLCHAIN_ITEMS:
-            if os.path.exists(filename.replace("gcc", tool)):
-                valid = True
-            else:
-                valid = False
-                break
-        # Try to retrieve the informations about the toolchain only for the valid toolchains
-        if valid:
-            self._validation_process = QProcess()
-            self._validation_process.start(filename, ["-v"])
-            self._validation_process.waitForStarted(1000)
-            if self._validation_process.waitForFinished(200):
-                description = unicode(self._validation_process.readAllStandardError())
-                info = bertos_utils.getToolchainInfo(description)
-                if len(info) >= 4:
-                    valid = True
-            else:
-                self._validation_process.kill()
+        info = self._toolchain_manager.validateToolchain(filename)
+
         # Add the item in the list with the appropriate associate data.
-        if valid:
+        if info:
             self._validItem(i, info)
         else:
             self._invalidItem(i)
-        toolchains = self.toolchains()
-        toolchains[filename] = True
-        self.setToolchains(toolchains)
     
     def isDefaultToolchain(self, toolchain):
         """
         Returns True if the given toolchain is one of the default toolchains.
         """
-        if os.name == "nt":
-            import winreg_importer
-            stored_toolchains = winreg_importer.getBertosToolchains()
-            if toolchain["path"] in stored_toolchains:
-                return True
-        return False
+        return toolchain["path"] in self._toolchain_manager._predefined_toolchain_set
     
     def disableRemoveButton(self):
         """

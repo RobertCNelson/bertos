@@ -26,12 +26,10 @@
  * invalidate any other reasons why the executable file might be covered by
  * the GNU General Public License.
  *
- * Copyright 2003, 2004, 2006 Develer S.r.l. (http://www.develer.com/)
+ * Copyright 2003, 2004, 2006, 2010 Develer S.r.l. (http://www.develer.com/)
  * Copyright 2000 Bernie Innocenti <bernie@codewiz.org>
  *
  * -->
- *
- * \version $Id$
  *
  * \author Bernie Innocenti <bernie@codewiz.org>
  * \author Stefano Fedrigo <aleph@develer.com>
@@ -41,8 +39,9 @@
 
 #include "menu.h"
 
-#include "cfg/cfg_gfx.h"
+#include "cfg/cfg_menu.h"
 #include "cfg/cfg_arch.h"
+
 #include <cfg/compiler.h>
 #include <cfg/debug.h>
 
@@ -56,10 +55,6 @@
 
 #if CPU_HARVARD
 #include <avr/pgmspace.h> /* strncpy_P() */
-#endif
-
-#if CONFIG_MENU_SMOOTH
-#include <drv/lcd_gfx.h>
 #endif
 
 #if (CONFIG_MENU_TIMEOUT != 0)
@@ -197,13 +192,11 @@ static void menu_layout(
 
 	ypos = bm->cr.ymin;
 
-#if 1
 	if (redraw)
 	{
 		/* Clear screen */
 		text_clear(menu->bitmap);
 	}
-#endif
 
 	if (title)
 	{
@@ -295,7 +288,7 @@ static void menu_layout(
 		/* Clear rest of area */
 		gfx_rectClear(bm, bm->cr.xmin, ypos, bm->cr.xmax, bm->cr.ymax);
 
-		lcd_blitBitmap(&lcd_bitmap);
+		menu->lcd_blitBitmap(bm);
 	}
 
 	/* Restore old cliprect */
@@ -442,7 +435,7 @@ iptr_t menu_handle(const struct Menu *menu)
 
 
 	items_per_page =
-		(menu->bitmap->height / menu->bitmap->font->height)
+		(menu->bitmap->height / menu->bitmap->font->height - 1)
 #if CONFIG_MENU_MENUBAR
 		- 1 /* menu bar labels */
 #endif

@@ -30,6 +30,8 @@
  * Copyright 2004 Giovanni Bajo
  * -->
  *
+ * \author Giovanni Bajo <rasky@develer.com>
+ *
  * \brief Portable hash table
  *
  * This file implements a portable hash table, with the following features:
@@ -48,22 +50,18 @@
  * a marker for a free node, so it is invalid to store a NULL pointer in the table
  * with \c ht_insert().
  *
- * \version $Id$
- * \author Giovanni Bajo <rasky@develer.com>
+ * $WIZ$ module_name = "hashtable"
+ * $WIZ$ module_configuration = "bertos/cfg/cfg_hashtable.h"
  */
 
 #ifndef STRUCT_HASHTABLE_H
 #define STRUCT_HASHTABLE_H
 
+#include "cfg/cfg_hashtable.h"
+
 #include <cfg/compiler.h>
 #include <cfg/macros.h>
 #include <cfg/debug.h>
-
-/**
- * Enable/disable support to declare special hash tables which maintain a copy of
- * the key internally instead of relying on the hook to extract it from the data.
- */
-#define CONFIG_HT_OPTIONAL_INTERNAL_KEY      1
 
 /// Maximum length of the internal key (use (2^n)-1 for slight speedup)
 #define INTERNAL_KEY_MAX_LENGTH     15
@@ -120,12 +118,25 @@ typedef struct
  */
 #define DECLARE_HASHTABLE(name, size, hook_gk) \
 	static const void* name##_nodes[1 << UINT32_LOG2(size)]; \
-	struct HashTable name = { name##_nodes, UINT32_LOG2(size), { false }, hook_gk }
+	struct HashTable name = \
+		{ \
+			.mem = name##_nodes, \
+			.max_elts_log2 = UINT32_LOG2(size), \
+			.flags = { .key_internal = false }, \
+			.key_data.hook = hook_gk \
+		}
+
 
 /** Exactly like \c DECLARE_HASHTABLE, but the variable will be declared as static. */
 #define DECLARE_HASHTABLE_STATIC(name, size, hook_gk) \
 	static const void* name##_nodes[1 << UINT32_LOG2(size)]; \
-	static struct HashTable name = { name##_nodes, UINT32_LOG2(size), { false }, { hook_gk } }
+	static struct HashTable name = \
+		{ \
+			.mem = name##_nodes, \
+			.max_elts_log2 = UINT32_LOG2(size), \
+			.flags = { .key_internal = false }, \
+			.key_data.hook = hook_gk \
+		}
 
 #if CONFIG_HT_OPTIONAL_INTERNAL_KEY
 	/** Declare a hash table with internal copies of the keys. This version does not
@@ -142,7 +153,13 @@ typedef struct
 	#define DECLARE_HASHTABLE_INTERNALKEY_STATIC(name, size) \
 		static uint8_t name##_keys[(1 << UINT32_LOG2(size)) * (INTERNAL_KEY_MAX_LENGTH + 1)]; \
 		static const void* name##_nodes[1 << UINT32_LOG2(size)]; \
-		static struct HashTable name = { name##_nodes, UINT32_LOG2(size), { true }, name##_keys }
+		static struct HashTable name = \
+			{ \
+				.mem = name##_nodes, \
+				.max_elts_log2 = UINT32_LOG2(size), \
+				.flags = { .key_internal = true }, \
+				.key_data.mem = name##_keys \
+			}
 #endif
 
 /**
@@ -151,7 +168,7 @@ typedef struct
  * \param ht Hash table declared with \c DECLARE_HASHTABLE
  *
  * \note This function must be called before using the hash table. Optionally,
- * it can be called later in the program to clear the hash table, 
+ * it can be called later in the program to clear the hash table,
  * removing all its elements.
  */
 void ht_init(struct HashTable* ht);
@@ -267,5 +284,9 @@ INLINE HashIterator ht_iter_next(HashIterator h)
 
 	return h;
 }
+
+int hashtable_testSetup(void);
+int hashtable_testRun(void);
+int hashtable_testTearDown(void);
 
 #endif /* STRUCT_HASHTABLE_H */

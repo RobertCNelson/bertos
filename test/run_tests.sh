@@ -39,7 +39,6 @@ SRC_LIST="
 	bertos/kern/proc.c
 	bertos/kern/signal.c
 	bertos/kern/sem.c
-	bertos/kern/coop.c
 	bertos/kern/preempt.c
 	bertos/mware/event.c
 	bertos/mware/formatwr.c
@@ -48,6 +47,7 @@ SRC_LIST="
 	bertos/os/hptime.c
 	bertos/struct/kfile_fifo.c
 	bertos/struct/heap.c
+	bertos/struct/hashtable.c
 	bertos/fs/fatfs/ff.c
 	bertos/emul/diskio_emul.c
 	bertos/fs/fat.c
@@ -61,6 +61,7 @@ SRC_LIST="
 	bertos/net/afsk.c
 	bertos/net/nmeap/src/nmeap01.c
 	bertos/net/nmea.c
+	bertos/cfg/kfile_debug.c
 "
 
 buildout='/dev/null'
