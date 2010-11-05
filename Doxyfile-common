@@ -587,6 +587,7 @@ EXCLUDE                = doc \
                          .svn \
                          qtext/qextftp.cpp \
                          wizard \
+                         bertos/net/lwip \
                          testout \
                          testout.old
 
@@ -1243,6 +1244,8 @@ PREDEFINED             = __doxygen__ \
                          CONFIG_KFILE_GETS=1 \
                          CONFIG_XMODEM_RECV=1 \
                          CONFIG_XMODEM_SEND=1 \
+                         LOG_LEVEL=3 \
+                         CONFIG_I2C_DISABLE_OLD_API=0 \
                          COMPILER_VARIADIC_MACROS=1
 
 # If the MACRO_EXPANSION and EXPAND_ONLY_PREDEF tags are set to YES then 

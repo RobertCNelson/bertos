@@ -162,6 +162,8 @@ class BModulePage(BWizardPage):
                         self.insertComboBox(index, configurations[property]["value"], configurations[property]["informations"]["value_list"])
                     elif "type" in configurations[property]["informations"] and configurations[property]["informations"]["type"] == "int":
                         self.insertSpinBox(index, configurations[property]["value"], configurations[property]["informations"])
+                    elif "type" in configurations[property]["informations"] and configurations[property]["informations"]["type"] == "hex":
+                        self.insertLineEdit(index, configurations[property]["value"], configurations[property]["informations"])
                     else:
                         # Not defined type, rendered as a text field
                         self.pageContent.propertyTable.setItem(index, 1, QTableWidgetItem(configurations[property]["value"]))
@@ -216,6 +218,8 @@ class BModulePage(BWizardPage):
                 configurations[configuration][property]["value"] = "1"
             else:
                 configurations[configuration][property]["value"] = "0"
+        elif configurations[configuration][property]["informations"]["type"] == "hex":
+            configurations[configuration][property]["value"] = unicode(self.pageContent.propertyTable.cellWidget(index, 1).text())
         self.setProjectInfo("CONFIGURATIONS", configurations)
         if self.moduleItem(self.currentModule()).checkState(0) == Qt.Checked:
             self.dependencyCheck(self.moduleItem(self.currentModule()))
@@ -342,6 +346,18 @@ class BModulePage(BWizardPage):
         self._control_group.addControl(index, spin_box)
         
     
+    def insertLineEdit(self, index, value, informations):
+        """
+        Inserts in the table at index a line edit for hexadecimal property
+        setted to value.
+        """
+        edit_box = QLineEdit()
+        edit_validator = QRegExpValidator(QRegExp(r"^0x[0-9A-Fa-f]+$"), edit_box)
+        edit_box.setValidator(edit_validator)
+        self.pageContent.propertyTable.setCellWidget(index, 1, edit_box)
+        edit_box.setText(value)
+        self._control_group.addControl(index, edit_box)
+
     def currentModule(self):
         """
         Retuns the current module name.
@@ -590,6 +606,8 @@ class QControlGroup(QObject):
             self.connect(control, SIGNAL("currentIndexChanged(int)"), lambda: self.stateChanged(id))
         elif type(control) == QDoubleSpinBox:
             self.connect(control, SIGNAL("valueChanged(double)"), lambda: self.stateChanged(id))
+        elif type(control) == QLineEdit:
+            self.connect(control, SIGNAL("textChanged(QString)"), lambda: self.stateChanged(id))
     
     def clear(self):
         """

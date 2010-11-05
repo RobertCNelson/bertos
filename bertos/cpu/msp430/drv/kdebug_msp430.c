@@ -26,7 +26,7 @@
  * invalidate any other reasons why the executable file might be covered by
  * the GNU General Public License.
  *
- * Copyright 2003, 2004, 2005, 2006, 2007 Develer S.r.l. (http://www.develer.com/)
+ * Copyright 2010 Develer S.r.l. (http://www.develer.com/)
  * Copyright 2010 Mohamed <mtarek16@gmail.com>
  *
  * -->
@@ -36,11 +36,12 @@
  * \author Mohamed Tarek <mtarek16@gmail.com>
  */
 
-#include <hw/hw_cpufreq.h>	/* for CPU_FREQ */
-#include "hw/hw_ser.h"		/* bus macros overrides */
+#include "kdebug_msp430.h"  /* for UART clock source definitions */
 
+#include "hw/hw_ser.h"      /* bus macros overrides */
 #include "cfg/cfg_debug.h"
-#include <cfg/macros.h>		/* for DIV_ROUND */
+
+#include <cfg/macros.h>     /* for DIV_ROUND */
 
 #include <cpu/types.h>
 #include <cpu/attr.h>
@@ -75,13 +76,13 @@
 	#define IE		IE2
 	#define IFG		IFG2
 
-	#if (CPU_MSP430_2274)
+	#if CPU_MSP430F2274
 		#define KDBG_MSP430_UART_PINS_INIT()	do{ P3SEL = 0x30; }while(0)
 	#endif
 
 #else
 
-	#if (CPU_MSP430_2274)
+	#if CPU_MSP430F2274
 		#error only 1 UART availbale, CONFIG_KDEBUG_PORT should be 0
 	#endif
 
@@ -102,20 +103,32 @@
 	IE = (old); \
 } while(0)
 
+#if CONFIG_KDEBUG_CLOCK_FREQ
+	#define KDBG_MSP430_FREQ CONFIG_KDEBUG_CLOCK_FREQ
+#else
+	#define KDBG_MSP430_FREQ CPU_FREQ
+#endif
+
 typedef uint8_t kdbg_irqsave_t;
 
 INLINE void kdbg_hw_init(void)
 {
-	/* Assume SMCLK = MCLK = DCO = CPU_FREQ */
-	/* Compute the baud rate */
-	uint16_t quot = DIV_ROUND(CPU_FREQ, CONFIG_KDEBUG_BAUDRATE);
-	KDBG_MSP430_UART_PINS_INIT();		// Configure USCI TX/RX pins
-	UCCTL1 |= UCSSEL_2;					// use SMCLK
-	UCBR0 	= quot & 0xFF;
-	UCBR1 	= quot >> 8;
-	UCMCTL 	= UCBRS0;					// No Modulation
-	UCCTL0	= 0;						// Default UART settings (8N1)
-	UCCTL1 &= ~UCSWRST;					// Initialize USCI state machine
-	KDBG_MASK_IRQ(IE2);					// Disable USCI interrupts
+	/* Compute the clock prescaler for the desired baudrate */
+	uint16_t quot = DIV_ROUND(KDBG_MSP430_FREQ, CONFIG_KDEBUG_BAUDRATE);
+	KDBG_MSP430_UART_PINS_INIT();       // Configure USCI TX/RX pins
+
+#if (CONFIG_KDEBUG_CLOCK_SOURCE == KDBG_UART_SMCLK)
+	UCCTL1 |= UCSSEL_SMCLK;
+#else
+	UCCTL1 |= UCSSEL_ACLK;
+#endif
+
+	UCBR0	= quot & 0xFF;              // Setup clock prescaler for the UART
+	UCBR1	= quot >> 8;
+
+	UCMCTL	= UCBRS0;                   // No Modulation
+	UCCTL0	= 0;                        // Default UART settings (8N1)
+	UCCTL1 &= ~UCSWRST;                 // Initialize USCI state machine
+	KDBG_MASK_IRQ(IE2);                 // Disable USCI interrupts
 }
 

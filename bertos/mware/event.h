@@ -30,10 +30,60 @@
  * Copyright 1999, 2001, 2003 Bernie Innocenti <bernie@codewiz.org>
  * -->
  *
+ * \addtogroup event_handling
+ *
  * \brief Events handling
  *
  * This module implements a common system for executing
  * a user defined action calling a hook function.
+ *
+ *
+ *  Device drivers often need to wait the completion of some event, usually to
+ *  allow the hardware to accomplish some asynchronous task.
+ *
+ *  A common approach is to place a busy wait with a cpu_relax() loop that invokes
+ *  the architecture-specific instructions to say that we're not doing much with
+ *  the processor.
+ *
+ *  Although technically correct, the busy loop degrades the overall system
+ *  performance in presence of multiple processes and power consumption.
+ *
+ *  With the kernel the natural way to implement such wait/complete mechanism is to
+ *  use signals via sig_wait() and sig_post()/sig_send().
+ *
+ *  However, signals in BeRTOS are only available in presence of the kernel (that
+ *  is just a compile-time option). This means that each device driver must provide
+ *  two different interfaces to implement the wait/complete semantic: one with the
+ *  kernel and another without the kernel.
+ *
+ *  The purpose of the completion events is to provide a generic interface to
+ *  implement a synchronization mechanism to block the execution of code until a
+ *  specific event happens.
+ *
+ *  This interface does not depend on the presence of the kernel and it
+ *  automatically uses the appropriate event backend to provide the same
+ *  behaviour with or without the kernel.
+ *
+ *  Example usage (wait for a generic device driver initialization):
+ *  \code
+ *  static Event e;
+ *
+ *  static void irq_handler(void)
+ *  {
+ *      // Completion event has happened, resume the execution of init()
+ *      event_do(&e);
+ *  }
+ *
+ *  static void init(void)
+ *  {
+ *      // Declare the generic completion event
+ *      event_initGeneric(&e);
+ *      // Submit the hardware initialization request
+ *      async_hw_init();
+ *      // Wait for the completion of the event
+ *      event_wait(&e);
+ *  }
+ *  \endcode
  *
  * \author Bernie Innocenti <bernie@codewiz.org>
  */
@@ -56,6 +106,11 @@
 	/* Forward decl */
 	struct Process;
 #endif
+
+/**
+ * \defgroup event_handling Events handling module
+ * \{
+ */
 
 
 /// User defined callback type
@@ -149,7 +204,7 @@ INLINE Event event_createSignal(struct Process *proc, sigbit_t bit)
 #if defined(CONFIG_KERN_SIGNALS) && CONFIG_KERN_SIGNALS
 /** Initialize the generic sleepable event \a e */
 #define event_initGeneric(e) \
-	event_initSignal(e, proc_current(), SIG_SINGLE)
+	event_initSignal(e, proc_current(), SIG_SYSTEM5)
 #else
 #define event_initGeneric(e) \
 	((e)->action = event_hook_generic, (e)->Ev.Gen.completed = false)
@@ -169,14 +224,21 @@ INLINE Event event_createGeneric(void)
 
 /**
  * Wait the completion of event \a e.
+ *
+ * This function releases the CPU the application is configured to use
+ * the kernel, otherwise it's just a busy wait.
+ * \note It's forbidden to use this function inside irq handling functions.
  */
 INLINE void event_wait(Event *e)
 {
 #if defined(CONFIG_KERN_SIGNALS) && CONFIG_KERN_SIGNALS
+	e->Ev.Sig.sig_proc = proc_current();
 	sig_wait(e->Ev.Sig.sig_bit);
 #else
 	while (ACCESS_SAFE(e->Ev.Gen.completed) == false)
 		cpu_relax();
+	e->Ev.Gen.completed = false;
+	MEMORY_BARRIER;
 #endif
 }
 
@@ -189,11 +251,16 @@ INLINE void event_wait(Event *e)
 
 /**
  * Wait the completion of event \a e or \a timeout elapses.
+ *
+ * \note It's forbidden to use this function inside irq handling functions.
  */
 INLINE bool event_waitTimeout(Event *e, ticks_t timeout)
 {
+	bool ret;
+
 #if defined(CONFIG_KERN_SIGNALS) && CONFIG_KERN_SIGNALS
-	return (sig_waitTimeout(e->Ev.Sig.sig_bit, timeout) & SIG_TIMEOUT) ?
+	e->Ev.Sig.sig_proc = proc_current();
+	ret = (sig_waitTimeout(e->Ev.Sig.sig_bit, timeout) & SIG_TIMEOUT) ?
 				false : true;
 #else
 	ticks_t end = timer_clock() + timeout;
@@ -201,16 +268,27 @@ INLINE bool event_waitTimeout(Event *e, ticks_t timeout)
 	while ((ACCESS_SAFE(e->Ev.Gen.completed) == false) ||
 			TIMER_AFTER(timer_clock(), end))
 		cpu_relax();
-
-	return e->Ev.Gen.completed;
+	ret = e->Ev.Gen.completed;
+	e->Ev.Gen.completed = false;
 #endif
+	MEMORY_BARRIER;
+	return ret;
 }
 #endif /* CONFIG_TIMER_EVENTS */
 
-/** Trigger an event */
+/**
+ * Trigger an event.
+ *
+ * Execute the callback function associated with event \a e.
+ *
+ * This function can be used also in interrupt routines, but only if the
+ * event was created as a signal or generic event.
+ */
 INLINE void event_do(struct Event *e)
 {
 	e->action(e);
 }
+
+/** \} */
 
 #endif /* KERN_EVENT_H */

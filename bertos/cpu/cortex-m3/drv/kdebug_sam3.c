@@ -30,7 +30,7 @@
  *
  * -->
  *
- * \brief AT91SAM3 debug support (implementation).
+ * \brief SAM3 debug support (implementation).
  *
  * \author Stefano Fedrigo <aleph@develer.com>
  */
@@ -38,31 +38,28 @@
 #include <cfg/cfg_debug.h>
 #include <cfg/macros.h> /* for BV() */
 
-#include <io/sam3_ints.h>
-#include <io/sam3_gpio.h>
-#include <io/sam3_pmc.h>
-#include <io/sam3_uart.h>
+#include <io/sam3.h>
 
 
 #if CONFIG_KDEBUG_PORT == 0
 	#define UART_BASE       UART0_BASE
-	#define UART_INT        INT_UART0
-	#define UART_GPIO_BASE  GPIO_PORTA_BASE
-	#define UART_PINS       (GPIO_UART0_RX_PIN | GPIO_UART0_TX_PIN)
-#elif (CONFIG_KDEBUG_PORT == 1) && !defined(CPU_CM3_AT91SAM3U)
+	#define UART_ID         UART0_ID
+	#define UART_PIO_BASE   PIOA_BASE
+	#define UART_PINS       (BV(RXD0) | BV(TXD0))
+#elif (CONFIG_KDEBUG_PORT == 1) && !defined(CPU_CM3_SAM3U)
 	#define UART_BASE       UART1_BASE
-	#define UART_INT        INT_UART1
-	#define UART_GPIO_BASE  GPIO_PORTB_BASE
-	#define UART_PINS       (GPIO_UART1_RX_PIN | GPIO_UART1_TX_PIN)
+	#define UART_ID         UART1_ID
+	#define UART_PIO_BASE   PIOB_BASE
+	#define UART_PINS       (BV(RXD1) | BV(TXD1))
 #else
 	#error "UART port not supported in this board"
 #endif
 
 // TODO: refactor serial simple functions and use them, see lm3s kdebug
-#define KDBG_WAIT_READY()     while (!(HWREG(UART_BASE + UART_SR) & UART_SR_TXRDY)) {}
-#define KDBG_WAIT_TXDONE()    while (!(HWREG(UART_BASE + UART_SR) & UART_SR_TXEMPTY)) {}
+#define KDBG_WAIT_READY()     while (!(HWREG(UART_BASE + UART_SR_OFF) & BV(UART_SR_TXRDY))) {}
+#define KDBG_WAIT_TXDONE()    while (!(HWREG(UART_BASE + UART_SR_OFF) & BV(UART_SR_TXEMPTY))) {}
 
-#define KDBG_WRITE_CHAR(c)    do { HWREG(UART_BASE + UART_THR) = (c); } while(0)
+#define KDBG_WRITE_CHAR(c)    do { HWREG(UART_BASE + UART_THR_OFF) = (c); } while(0)
 
 /* Debug unit is used only for debug purposes so does not generate interrupts. */
 #define KDBG_MASK_IRQ(old)    do { (void)old; } while(0)
@@ -76,22 +73,22 @@ typedef uint32_t kdbg_irqsave_t;
 INLINE void kdbg_hw_init(void)
 {
 	/* Disable PIO mode and set appropriate UART pins peripheral mode */
-	HWREG(UART_GPIO_BASE + GPIO_PDR) = UART_PINS;
-	HWREG(UART_GPIO_BASE + GPIO_ABCDSR1) &= ~UART_PINS;
-	HWREG(UART_GPIO_BASE + GPIO_ABCDSR2) &= ~UART_PINS;
+	HWREG(UART_PIO_BASE + PIO_PDR_OFF) = UART_PINS;
+	HWREG(UART_PIO_BASE + PIO_ABCDSR1_OFF) &= ~UART_PINS;
+	HWREG(UART_PIO_BASE + PIO_ABCDSR2_OFF) &= ~UART_PINS;
 
 	/* Enable the peripheral clock */
-	PMC_PCER_R = UART_INT;
+	PMC_PCER = BV(UART_ID);
 
 	/* Reset and disable receiver & transmitter */
-	HWREG(UART_BASE + UART_CR) = UART_CR_RSTRX | UART_CR_RSTTX | UART_CR_RXDIS | UART_CR_TXDIS;
+	HWREG(UART_BASE + UART_CR_OFF) = BV(UART_CR_RSTRX) | BV(UART_CR_RSTTX) | BV(UART_CR_RXDIS) | BV(UART_CR_TXDIS);
 
 	/* Set mode: normal, no parity */
-	HWREG(UART_BASE + UART_MR) = UART_MR_PAR_NO;
+	HWREG(UART_BASE + UART_MR_OFF) = UART_MR_PAR_NO;
 
 	/* Set baud rate */
-	HWREG(UART_BASE + UART_BRGR) = CPU_FREQ / CONFIG_KDEBUG_BAUDRATE / 16;
+	HWREG(UART_BASE + UART_BRGR_OFF) = CPU_FREQ / CONFIG_KDEBUG_BAUDRATE / 16;
 
 	/* Enable receiver & transmitter */
-	HWREG(UART_BASE + UART_CR) = UART_CR_RXEN | UART_CR_TXEN;
+	HWREG(UART_BASE + UART_CR_OFF) = BV(UART_CR_RXEN) | BV(UART_CR_TXEN);
 }

@@ -30,18 +30,26 @@
  *
  * -->
  *
- * \brief AT91SAM3 clocking driver.
+ * \brief Atmel SAM3 clock setup.
  *
  * \author Stefano Fedrigo <aleph@develer.com>
  */
 
 #include "clock_sam3.h"
-#include <io/sam3_pmc.h>
 #include <cfg/compiler.h>
 #include <cfg/macros.h>
+#include <io/sam3.h>
 
-/* Value to use when writing CKGR_MOR, to unlock write */
-#define CKGR_KEY  0x37
+
+/* Frequency of board main oscillator */
+#define BOARDOSC_FREQ  12000000
+
+/* Main crystal oscillator startup time, optimal value for CPU_FREQ == 48 MHz */
+#define BOARD_OSC_COUNT  (CKGR_MOR_MOSCXTST(0x8))
+
+/* Timer countdown timeout for clock initialization operations */
+#define CLOCK_TIMEOUT    0xFFFFFFFF
+
 
 /*
  * Try to evaluate the correct divider and multiplier value depending
@@ -63,8 +71,7 @@ INLINE uint32_t evaluate_pll(void)
 	{
 		for (div = 1; div <= 24; div++)
 		{
-			// RC oscillator set to 12 MHz
-			freq = 12000000 / div * (1 + mul);
+			freq = BOARDOSC_FREQ / div * (1 + mul);
 			if (ABS((int)CPU_FREQ - freq) < best_delta) {
 				best_delta = ABS((int)CPU_FREQ - freq);
 				best_mul = mul;
@@ -80,14 +87,51 @@ INLINE uint32_t evaluate_pll(void)
 
 void clock_init(void)
 {
-	/* Enable and configure internal Fast RC oscillator */
-	CKGR_MOR_R =
-		CKGR_MOR_KEY(CKGR_KEY)       // Unlock key
-		| CKGR_MOR_MOSCRCEN          // Main On-Chip RC oscillator enable
-		| CKGR_MOR_MOSCRCF_12MHZ;    // RC oscillator frequency
+	uint32_t timeout;
 
-	/* Master clock: select PLL clock and no prescaling */
-	PMC_MCKR_R = PMC_MCKR_CSS_PLL_CLK;
+	/* Disable watchdog */
+	WDT_MR = BV(WDT_WDDIS);
 
-	CKGR_PLLR_R = evaluate_pll();
+	/* Set 4 wait states for flash access, needed for higher CPU clock rates */
+	EEFC_FMR = EEFC_FMR_FWS(3);
+
+	// Select external slow clock
+	if (!(SUPC_SR & BV(SUPC_SR_OSCSEL)))
+	{
+		SUPC_CR = BV(SUPC_CR_XTALSEL) | SUPC_CR_KEY(0xA5);
+		while (!(SUPC_SR & BV(SUPC_SR_OSCSEL)));
+	}
+
+	// Initialize main oscillator
+	if (!(CKGR_MOR & BV(CKGR_MOR_MOSCSEL)))
+	{
+		CKGR_MOR = CKGR_MOR_KEY(0x37) | BOARD_OSC_COUNT | BV(CKGR_MOR_MOSCRCEN) | BV(CKGR_MOR_MOSCXTEN);
+		timeout = CLOCK_TIMEOUT;
+		while (!(PMC_SR & BV(PMC_SR_MOSCXTS)) && --timeout);
+	}
+
+	// Switch to external oscillator
+	CKGR_MOR = CKGR_MOR_KEY(0x37) | BOARD_OSC_COUNT | BV(CKGR_MOR_MOSCRCEN) | BV(CKGR_MOR_MOSCXTEN) | BV(CKGR_MOR_MOSCSEL);
+	timeout = CLOCK_TIMEOUT;
+	while (!(PMC_SR & BV(PMC_SR_MOSCSELS)) && --timeout);
+
+	PMC_MCKR = (PMC_MCKR & ~(uint32_t)PMC_MCKR_CSS_MASK) | PMC_MCKR_CSS_MAIN_CLK;
+	timeout = CLOCK_TIMEOUT;
+	while (!(PMC_SR & BV(PMC_SR_MCKRDY)) && --timeout);
+
+	// Initialize and enable PLL clock
+	CKGR_PLLR = evaluate_pll() | BV(CKGR_PLLR_STUCKTO1) | CKGR_PLLR_PLLCOUNT(0x1);
+	timeout = CLOCK_TIMEOUT;
+	while (!(PMC_SR & BV(PMC_SR_LOCK)) && --timeout);
+
+	PMC_MCKR = PMC_MCKR_CSS_MAIN_CLK;
+	timeout = CLOCK_TIMEOUT;
+	while (!(PMC_SR & BV(PMC_SR_MCKRDY)) && --timeout);
+
+	PMC_MCKR = PMC_MCKR_CSS_PLL_CLK;
+	timeout = CLOCK_TIMEOUT;
+	while (!(PMC_SR & BV(PMC_SR_MCKRDY)) && --timeout);
+
+	/* Enable clock on PIO for inputs */
+	PMC_PCER = BV(PIOA_ID) | BV(PIOB_ID) | BV(PIOC_ID);
 }

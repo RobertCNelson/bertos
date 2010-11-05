@@ -58,9 +58,6 @@
 
 #include "drv/usbser.h"
 
-#define USB_SERIAL_VENDOR_ID	0x05f9
-#define USB_SERIAL_PRODUCT_ID	0xffff
-
 #define USB_SERIAL_INTERFACES	1
 #define USB_SERIAL_ENDPOINTS	3
 
