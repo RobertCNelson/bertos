@@ -30,9 +30,19 @@
  *
  * -->
  *
- * \brief Script for Luminary Micro LM3S8968 Cortex M3 family processors.
+ * \brief Script for Luminary Micro LM3S8962 Cortex M3 family processors.
  *
  * \author Andrea Righi <arighi@develer.com>
  */
 
-INCLUDE bertos/cpu/cortex-m3/scripts/lm3s1968_ram.ld
+/*
+ * Define memory configuration for LM3S8962 board
+ */
+MEMORY
+{
+        rom(rx) : org = 0x00000000, len = 256k
+        ram(rwx) : org = 0x20000000, len = 64k
+}
+
+INCLUDE "bertos/cpu/cortex-m3/scripts/cortex-m3_ram.ld"
+

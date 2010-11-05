@@ -44,7 +44,6 @@
  * we use a kfile_test module that perform some generic test.
  *
  *
- * \version $Id$
  * \author Daniele Basile <asterix@develer.com>
  */
 
@@ -66,7 +65,7 @@
 #include <drv/dataflash.h>
 
 #include <kern/proc.h>
-#include <kern/kfile.h>
+#include <io/kfile.h>
 
 #include <string.h>
 

@@ -31,7 +31,6 @@
  *
  * \brief Functions to convert integers to/from host byte-order.
  *
- * \version $Id$
  * \author Bernie Innocenti <bernie@codewiz.org>
  * \author Stefano Fedrigo <aleph@develer.com>
  */
@@ -41,35 +40,89 @@
 
 #include <cfg/compiler.h>
 #include <cpu/attr.h>
+#include <cpu/detect.h>
+#include <cpu/types.h>
+#include <cfg/macros.h>
 
 /**
  * Swap upper and lower bytes in a 16-bit value.
  */
-INLINE uint16_t swab16(uint16_t x)
-{
-	return    ((x & (uint16_t)0x00FFU) << 8)
-		| ((x & (uint16_t)0xFF00U) >> 8);
-}
+#define SWAB16(x) ((uint16_t)(ROTR((x), 8) + \
+		STATIC_ASSERT_EXPR(sizeof(x) == sizeof(uint16_t))))
 
+/*
+ * On Cortex-M3, GCC 4.4 builtin implementation is slower than our own
+ * rot-based implementation.
+ */
+#if GNUC_PREREQ(4, 3) && !CPU_CM3
+#define SWAB32(x) ((uint32_t)(__builtin_bswap32((x) + \
+		STATIC_ASSERT_EXPR(sizeof(x) == sizeof(uint32_t)))))
+#else
 /**
  * Reverse bytes in a 32-bit value (e.g.: 0x12345678 -> 0x78563412).
  */
-INLINE uint32_t swab32(uint32_t x)
-{
-	return    ((x & (uint32_t)0x000000FFUL) << 24)
-		| ((x & (uint32_t)0x0000FF00UL) <<  8)
-		| ((x & (uint32_t)0x00FF0000UL) >>  8)
-		| ((x & (uint32_t)0xFF000000UL) >> 24);
-}
+#define SWAB32(x) ((uint32_t)(( \
+	(ROTR(x, 8) & 0xFF00FF00) | \
+	(ROTL(x, 8) & 0x00FF00FF))) + \
+		STATIC_ASSERT_EXPR(sizeof(x) == sizeof(uint32_t)))
+#endif
 
+#if GNUC_PREREQ(4, 3)
+#define SWAB64(x) ((uint64_t)(__builtin_bswap64((x) + \
+		STATIC_ASSERT_EXPR(sizeof(x) == sizeof(uint64_t)))))
+#else
 /**
  * Reverse bytes in a 64-bit value.
  */
-INLINE uint64_t swab64(uint64_t x)
-{
-	return (uint64_t)swab32(x >> 32)
-		| ((uint64_t)swab32(x & 0xFFFFFFFFUL) << 32);
-}
+#define SWAB64(x) ((uint64_t)(						\
+	(((uint64_t)(x) & (uint64_t)0x00000000000000ffULL) << 56) |	\
+	(((uint64_t)(x) & (uint64_t)0x000000000000ff00ULL) << 40) |	\
+	(((uint64_t)(x) & (uint64_t)0x0000000000ff0000ULL) << 24) |	\
+	(((uint64_t)(x) & (uint64_t)0x00000000ff000000ULL) <<  8) |	\
+	(((uint64_t)(x) & (uint64_t)0x000000ff00000000ULL) >>  8) |	\
+	(((uint64_t)(x) & (uint64_t)0x0000ff0000000000ULL) >> 24) |	\
+	(((uint64_t)(x) & (uint64_t)0x00ff000000000000ULL) >> 40) |	\
+	(((uint64_t)(x) & (uint64_t)0xff00000000000000ULL) >> 56) +	\
+		STATIC_ASSERT_EXPR(sizeof(x) == sizeof(uint64_t))))
+#endif
+
+#if CPU_BYTE_ORDER == CPU_LITTLE_ENDIAN
+#define cpu_to_le16(x) ((uint16_t)(x + \
+		STATIC_ASSERT_EXPR(sizeof(x) == sizeof(uint16_t))))
+#define cpu_to_le32(x) ((uint32_t)(x + \
+		STATIC_ASSERT_EXPR(sizeof(x) == sizeof(uint32_t))))
+#define cpu_to_le64(x) ((uint64_t)(x + \
+		STATIC_ASSERT_EXPR(sizeof(x) == sizeof(uint64_t))))
+#define cpu_to_be16(x) SWAB16(x)
+#define cpu_to_be32(x) SWAB32(x)
+#define cpu_to_be64(x) SWAB64(x)
+#elif CPU_BYTE_ORDER == CPU_BIG_ENDIAN
+#define cpu_to_le16(x) SWAB16(x)
+#define cpu_to_le32(x) SWAB32(x)
+#define cpu_to_le64(x) SWAB64(x)
+#define cpu_to_be16(x) ((uint16_t)(x + \
+		STATIC_ASSERT_EXPR(sizeof(x) == sizeof(uint16_t))))
+#define cpu_to_be32(x) ((uint32_t)(x + \
+		STATIC_ASSERT_EXPR(sizeof(x) == sizeof(uint32_t))))
+#define cpu_to_be64(x) ((uint64_t)(x + \
+		STATIC_ASSERT_EXPR(sizeof(x) == sizeof(uint64_t))))
+#else
+#error "unrecognized CPU endianness"
+#endif
+
+#define be16_to_cpu(x)		cpu_to_be16(x)
+#define le16_to_cpu(x)		cpu_to_le16(x)
+#define be32_to_cpu(x)		cpu_to_be32(x)
+#define le32_to_cpu(x)		cpu_to_le32(x)
+#define be64_to_cpu(x)		cpu_to_be64(x)
+#define le64_to_cpu(x)		cpu_to_le64(x)
+
+#define host_to_net16(x)	cpu_to_be16(x)
+#define net_to_host16(x)	be16_to_cpu(x)
+#define host_to_net32(x)	cpu_to_be32(x)
+#define net_to_host32(x)	be32_to_cpu(x)
+#define host_to_net64(x)	cpu_to_be64(x)
+#define net_to_host64(x)	be64_to_cpu(x)
 
 /**
  * Reverse bytes in a float value.
@@ -86,36 +139,6 @@ INLINE float swab_float(float x)
 	return x;
 }
 
-INLINE uint16_t cpu_to_be16(uint16_t x)
-{
-	return (CPU_BYTE_ORDER == CPU_LITTLE_ENDIAN) ? swab16(x) : x;
-}
-
-INLINE uint16_t cpu_to_le16(uint16_t x)
-{
-	return (CPU_BYTE_ORDER == CPU_BIG_ENDIAN) ? swab16(x) : x;
-}
-
-INLINE uint32_t cpu_to_be32(uint32_t x)
-{
-	return (CPU_BYTE_ORDER == CPU_LITTLE_ENDIAN) ? swab32(x) : x;
-}
-
-INLINE uint32_t cpu_to_le32(uint32_t x)
-{
-	return (CPU_BYTE_ORDER == CPU_BIG_ENDIAN) ? swab32(x) : x;
-}
-
-INLINE uint64_t cpu_to_be64(uint64_t x)
-{
-	return (CPU_BYTE_ORDER == CPU_LITTLE_ENDIAN) ? swab64(x) : x;
-}
-
-INLINE uint64_t cpu_to_le64(uint64_t x)
-{
-	return (CPU_BYTE_ORDER == CPU_BIG_ENDIAN) ? swab64(x) : x;
-}
-
 INLINE float cpu_to_be_float(float x)
 {
 	return (CPU_BYTE_ORDER == CPU_LITTLE_ENDIAN) ? swab_float(x) : x;
@@ -124,36 +147,6 @@ INLINE float cpu_to_be_float(float x)
 INLINE float cpu_to_le_float(float x)
 {
 	return (CPU_BYTE_ORDER == CPU_BIG_ENDIAN) ? swab_float(x) : x;
-}
-
-INLINE uint16_t be16_to_cpu(uint16_t x)
-{
-	return cpu_to_be16(x);
-}
-
-INLINE uint16_t le16_to_cpu(uint16_t x)
-{
-	return cpu_to_le16(x);
-}
-
-INLINE uint32_t be32_to_cpu(uint32_t x)
-{
-	return cpu_to_be32(x);
-}
-
-INLINE uint32_t le32_to_cpu(uint32_t x)
-{
-	return cpu_to_le32(x);
-}
-
-INLINE uint64_t be64_to_cpu(uint64_t x)
-{
-	return cpu_to_be64(x);
-}
-
-INLINE uint64_t le64_to_cpu(uint64_t x)
-{
-	return cpu_to_le64(x);
 }
 
 INLINE float be_float_to_cpu(float x)
@@ -166,36 +159,6 @@ INLINE float le_float_to_cpu(float x)
 	return cpu_to_le_float(x);
 }
 
-INLINE uint16_t host_to_net16(uint16_t x)
-{
-	return cpu_to_be16(x);
-}
-
-INLINE uint16_t net_to_host16(uint16_t x)
-{
-	return be16_to_cpu(x);
-}
-
-INLINE uint32_t host_to_net32(uint32_t x)
-{
-	return cpu_to_be32(x);
-}
-
-INLINE uint32_t net_to_host32(uint32_t x)
-{
-	return be32_to_cpu(x);
-}
-
-INLINE uint64_t host_to_net64(uint64_t x)
-{
-	return cpu_to_be64(x);
-}
-
-INLINE uint64_t net_to_host64(uint64_t x)
-{
-	return be64_to_cpu(x);
-}
-
 INLINE float host_to_net_float(float x)
 {
 	return cpu_to_be_float(x);
@@ -206,18 +169,49 @@ INLINE float net_to_host_float(float x)
 	return be_float_to_cpu(x);
 }
 
+#if CPU_ARM
+INLINE cpu_atomic_t
+cpu_atomic_xchg(volatile cpu_atomic_t *ptr, cpu_atomic_t val)
+{
+	cpu_atomic_t ret;
+
+	asm volatile(
+		"swp     %0, %1, [%2]"
+
+		: "=&r" (ret)
+		: "r" (val), "r" (ptr)
+		: "memory", "cc");
+
+	return ret;
+}
+#else /* CPU_ARM */
+#include <cpu/irq.h>
+
+INLINE cpu_atomic_t
+cpu_atomic_xchg(volatile cpu_atomic_t *ptr, cpu_atomic_t val)
+{
+	cpu_atomic_t ret;
+
+	ATOMIC(
+		ret = *ptr;
+		*ptr = val;
+	);
+	return ret;
+}
+#endif /* CPU_ARM */
+
 #ifdef __cplusplus
 
 /// Type generic byte swapping.
 template<typename T>
 INLINE T swab(T x);
 
-template<> INLINE uint16_t swab(uint16_t x) { return swab16(x); }
-template<> INLINE uint32_t swab(uint32_t x) { return swab32(x); }
-template<> INLINE uint64_t swab(uint64_t x) { return swab64(x); }
-template<> INLINE int16_t  swab(int16_t x)  { return static_cast<int16_t>(swab16(static_cast<uint16_t>(x))); }
-template<> INLINE int32_t  swab(int32_t x)  { return static_cast<int32_t>(swab32(static_cast<uint32_t>(x))); }
-template<> INLINE int64_t  swab(int64_t x)  { return static_cast<int64_t>(swab64(static_cast<uint64_t>(x))); }
+template<> INLINE uint16_t swab(uint16_t x) { return SWAB16(x); }
+template<> INLINE uint32_t swab(uint32_t x) { return SWAB32(x); }
+template<> INLINE uint64_t swab(uint64_t x) { return SWAB64(x); }
+template<> INLINE int16_t  swab(int16_t x)  { return static_cast<int16_t>(SWAB16(static_cast<uint16_t>(x))); }
+template<> INLINE int32_t  swab(int32_t x)  { return static_cast<int32_t>(SWAB32(static_cast<uint32_t>(x))); }
+template<> INLINE int64_t  swab(int64_t x)  { return static_cast<int64_t>(SWAB64(static_cast<uint64_t>(x))); }
 template<> INLINE float    swab(float x)    { return swab_float(x); }
 
 /// Type generic conversion from CPU byte order to big-endian byte order.

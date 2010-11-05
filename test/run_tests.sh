@@ -33,8 +33,6 @@ SRC_LIST="
 	bertos/algo/ramp.c
 	bertos/drv/kdebug.c
 	bertos/drv/timer.c
-	bertos/fs/battfs.c
-	bertos/kern/kfile.c
 	bertos/kern/monitor.c
 	bertos/kern/proc.c
 	bertos/kern/signal.c
@@ -51,6 +49,7 @@ SRC_LIST="
 	bertos/fs/fatfs/ff.c
 	bertos/emul/diskio_emul.c
 	bertos/fs/fat.c
+	bertos/fs/battfs.c
 	bertos/emul/switch_ctx_emul.S
 	bertos/mware/ini_reader.c
 	bertos/emul/kfile_posix.c
@@ -62,6 +61,20 @@ SRC_LIST="
 	bertos/net/nmeap/src/nmeap01.c
 	bertos/net/nmea.c
 	bertos/cfg/kfile_debug.c
+	bertos/io/kblock.c
+	bertos/io/kblock_ram.c
+	bertos/io/kblock_posix.c
+	bertos/io/kfile.c
+	bertos/sec/cipher.c
+	bertos/sec/cipher/blowfish.c
+	bertos/sec/cipher/aes.c
+	bertos/sec/kdf/pbkdf1.c
+	bertos/sec/kdf/pbkdf2.c
+	bertos/sec/hash/sha1.c
+	bertos/sec/hash/md5.c
+	bertos/sec/hash/ripemd.c
+	bertos/sec/mac/hmac.c
+	bertos/sec/mac/omac.c
 "
 
 buildout='/dev/null'
@@ -91,19 +104,25 @@ for src in $TESTS; do
 
 	[ $VERBOSE -gt 0 ] && echo "Preparing $name..."
 	[ $VERBOSE -gt 4 ] && echo " $PREPARECMD"
-	if $PREPARECMD 2>&1 | tee >$buildout $testdir/$name.prep; then
+	if $PREPARECMD 2>&1 | tee -a >>$buildout $testdir/$name.prep; then
 		[ $VERBOSE -gt 0 ] && echo "Building $name..."
 		[ $VERBOSE -gt 4 ] && echo " $BUILDCMD"
-		if $BUILDCMD 2>&1 | tee >$buildout $testdir/$name.build; then
+		if $BUILDCMD 2>&1 | tee -a >>$buildout $testdir/$name.build; then
 			[ $VERBOSE -gt 0 ] && echo "Running $name..."
-			if ! $exe 2>&1 | tee >$runout $testdir/$name.out; then
+			if ! $exe 2>&1 | tee -a >>$runout $testdir/$name.out; then
 				echo "FAILED [RUN]: $name"
+				cat $testdir/$name.out
+				exit 2
 			fi
 		else
 			echo "FAILED [BUILD]: $name"
+			cat $testdir/$name.build
+			exit 3
 		fi
 	else
 		echo "FAILED [PREPARING]: $name"
+		cat $testdir/$name.prep
+		exit 4
 	fi
 done
 

@@ -28,7 +28,6 @@
 #
 # Copyright 2008 Develer S.r.l. (http://www.develer.com/)
 #
-# $Id$
 #
 # Author: Lorenzo Berni <duplo@develer.com>
 #
@@ -150,7 +149,11 @@ class BModulePage(BWizardPage):
                     self.pageContent.propertyTable.setRowCount(index + 1)
                     item = QTableWidgetItem(configurations[property]["brief"])
                     item.setFlags(item.flags() & ~Qt.ItemIsSelectable)
-                    item.setToolTip(property)
+                    tooltip = property
+                    description = configurations[property].get("description", None)
+                    if description:
+                        tooltip = tooltip + ": " + description
+                    item.setToolTip(tooltip)
                     item.setData(Qt.UserRole, qvariant_converter.convertString(property))
                     self.pageContent.propertyTable.setItem(index, 0, item)
                     if "type" in configurations[property]["informations"] and configurations[property]["informations"]["type"] == "boolean":
@@ -159,6 +162,8 @@ class BModulePage(BWizardPage):
                         self.insertComboBox(index, configurations[property]["value"], configurations[property]["informations"]["value_list"])
                     elif "type" in configurations[property]["informations"] and configurations[property]["informations"]["type"] == "int":
                         self.insertSpinBox(index, configurations[property]["value"], configurations[property]["informations"])
+                    elif "type" in configurations[property]["informations"] and configurations[property]["informations"]["type"] == "hex":
+                        self.insertLineEdit(index, configurations[property]["value"], configurations[property]["informations"])
                     else:
                         # Not defined type, rendered as a text field
                         self.pageContent.propertyTable.setItem(index, 1, QTableWidgetItem(configurations[property]["value"]))
@@ -213,6 +218,8 @@ class BModulePage(BWizardPage):
                 configurations[configuration][property]["value"] = "1"
             else:
                 configurations[configuration][property]["value"] = "0"
+        elif configurations[configuration][property]["informations"]["type"] == "hex":
+            configurations[configuration][property]["value"] = unicode(self.pageContent.propertyTable.cellWidget(index, 1).text())
         self.setProjectInfo("CONFIGURATIONS", configurations)
         if self.moduleItem(self.currentModule()).checkState(0) == Qt.Checked:
             self.dependencyCheck(self.moduleItem(self.currentModule()))
@@ -339,6 +346,18 @@ class BModulePage(BWizardPage):
         self._control_group.addControl(index, spin_box)
         
     
+    def insertLineEdit(self, index, value, informations):
+        """
+        Inserts in the table at index a line edit for hexadecimal property
+        setted to value.
+        """
+        edit_box = QLineEdit()
+        edit_validator = QRegExpValidator(QRegExp(r"^0x[0-9A-Fa-f]+$"), edit_box)
+        edit_box.setValidator(edit_validator)
+        self.pageContent.propertyTable.setCellWidget(index, 1, edit_box)
+        edit_box.setText(value)
+        self._control_group.addControl(index, edit_box)
+
     def currentModule(self):
         """
         Retuns the current module name.
@@ -410,6 +429,9 @@ class BModulePage(BWizardPage):
         item.setFont(0, font)
         self.pageContent.moduleTree.blockSignals(False)
 
+    def isBold(self, item):
+        return item.font(0).bold()
+
     def moduleSelected(self, selectedModule):
         """
         Resolves the selection dependencies.
@@ -473,9 +495,14 @@ class BModulePage(BWizardPage):
                         modules[module]["enabled"] = False
                     for category in range(self.pageContent.moduleTree.topLevelItemCount()):
                         item = self.pageContent.moduleTree.topLevelItem(category)
+                        self.setBold(item, False)
                         for child in range(item.childCount()):
                             if unicode(item.child(child).text(0)) in unsatisfied:
+                                self.setBold(item.child(child), False)
                                 item.child(child).setCheckState(0, Qt.Unchecked)
+                            else:
+                                if self.isBold(item.child(child)):
+                                    self.setBold(item, True)
                     for module, param in unsatisfied_params:
                         configuration_file = self.projectInfo("MODULES")[module]["configuration"]
                         configurations = self.projectInfo("CONFIGURATIONS")
@@ -579,6 +606,8 @@ class QControlGroup(QObject):
             self.connect(control, SIGNAL("currentIndexChanged(int)"), lambda: self.stateChanged(id))
         elif type(control) == QDoubleSpinBox:
             self.connect(control, SIGNAL("valueChanged(double)"), lambda: self.stateChanged(id))
+        elif type(control) == QLineEdit:
+            self.connect(control, SIGNAL("textChanged(QString)"), lambda: self.stateChanged(id))
     
     def clear(self):
         """

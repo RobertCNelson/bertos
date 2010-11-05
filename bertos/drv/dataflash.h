@@ -32,7 +32,6 @@
  *
  * \brief Function library for dataflash AT45DB family.
  *
- * \version $Id$
  *
  * \author Daniele Basile <asterix@develer.com>
  *
@@ -48,7 +47,7 @@
 
 #include <cfg/compiler.h>
 
-#include <kern/kfile.h>
+#include <io/kfile.h>
 #include <fs/battfs.h>
 
 /**

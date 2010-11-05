@@ -34,7 +34,6 @@
  * For now, only UI frames without any Layer 3 protocol are handled.
  * This however is enough to send/receive APRS packets.
  *
- * \version $Id$
  * \author Francesco Sacchi <batt@develer.com>
  *
  * $WIZ$ module_name = "ax25"
@@ -49,7 +48,7 @@
 #include "cfg/cfg_ax25.h"
 
 #include <cfg/compiler.h>
-#include <kern/kfile.h>
+#include <io/kfile.h>
 
 /**
  * Maximum size of a AX25 frame.

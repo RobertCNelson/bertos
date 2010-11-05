@@ -247,7 +247,7 @@ IDL_PROPERTY_SUPPORT   = YES
 # member in the group (if any) for the other members of the group. By default 
 # all members of a group must be documented explicitly.
 
-DISTRIBUTE_GROUP_DOC   = NO
+DISTRIBUTE_GROUP_DOC   = YES
 
 # Set the SUBGROUPING tag to YES (the default) to allow class member groups of 
 # the same type (for instance a group of public functions) to be put as a 
@@ -587,6 +587,7 @@ EXCLUDE                = doc \
                          .svn \
                          qtext/qextftp.cpp \
                          wizard \
+                         bertos/net/lwip \
                          testout \
                          testout.old
 
@@ -1243,6 +1244,8 @@ PREDEFINED             = __doxygen__ \
                          CONFIG_KFILE_GETS=1 \
                          CONFIG_XMODEM_RECV=1 \
                          CONFIG_XMODEM_SEND=1 \
+                         LOG_LEVEL=3 \
+                         CONFIG_I2C_DISABLE_OLD_API=0 \
                          COMPILER_VARIADIC_MACROS=1
 
 # If the MACRO_EXPANSION and EXPAND_ONLY_PREDEF tags are set to YES then 

@@ -33,7 +33,6 @@
  * \brief Generic Serial-in, Parallel-out implementation (SIPO).
  *
  *
- * \version $Id$
  *
  * \author Andrea Grandi <andrea@develer.com>
  * \author Daniele Basile <asterix@develer.com>
@@ -52,7 +51,7 @@
 
 #include "hw/hw_sipo.h"
 
-#include <kern/kfile.h>
+#include <io/kfile.h>
 
 #define SIPO_DATAORDER_START_LSB        1
 #define SIPO_DATAORDER_START_MSB     0x80

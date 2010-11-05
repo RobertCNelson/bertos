@@ -38,22 +38,10 @@
 
 #include <io/stm32.h>
 
-/* GPIO configuration registers structure */
-struct stm32_gpio
-{
-	reg32_t CRL;
-	reg32_t CRH;
-	reg32_t IDR;
-	reg32_t ODR;
-	reg32_t BSRR;
-	reg32_t BRR;
-	reg32_t LCKR;
-};
-
 /**
  * GPIO mode
+ * \{
  */
-/*\{*/
 enum
 {
 	GPIO_MODE_AIN = 0x0,
@@ -69,8 +57,8 @@ enum
 
 /**
  * GPIO speed
+ *\{
  */
-/*\{*/
 enum
 {
 	GPIO_SPEED_10MHZ = 1,
@@ -79,9 +67,14 @@ enum
 };
 /*\}*/
 
-/* Write a value to the specified pin(s) */
-INLINE void
-stm32_gpioPinWrite(struct stm32_gpio *base, uint32_t pins, uint8_t val)
+/**
+ * Write a value to the specified pin(s)
+ *
+ * \param base gpio register address
+ * \param pins mask of pins that we want set or clear
+ * \param val true to set selected pins of false to clear they.
+ */
+INLINE void stm32_gpioPinWrite(struct stm32_gpio *base, uint32_t pins, bool val)
 {
 	if (val)
 		base->BSRR |= pins;
@@ -89,14 +82,25 @@ stm32_gpioPinWrite(struct stm32_gpio *base, uint32_t pins, uint8_t val)
 		base->BRR  |= pins;
 }
 
-/* Read a value from the specified pin(s) */
+/**
+ * Read a value from the specified pin(s)
+ *
+ * \param base gpio register address
+ * \param pins mask of pins that we want read
+ */
 INLINE uint8_t stm32_gpioPinRead(struct stm32_gpio *base, uint32_t pins)
 {
-	return !!(base->IDR & pins);
+	return (base->IDR & pins);
 }
 
-/* Initialize a GPIO peripheral configuration */
-int stm32_gpioPinConfig(struct stm32_gpio *base,
-			uint16_t pins, uint8_t mode, uint8_t speed);
+/**
+ * Initialize a GPIO peripheral configuration
+ *
+ * \param base gpio register address
+ * \param pins mask of pins that we want to configure
+ * \param mode select the behaviour of selected pins
+ * \param speed clock frequency for selected gpio ports
+ */
+int stm32_gpioPinConfig(struct stm32_gpio *base, uint16_t pins, uint8_t mode, uint8_t speed);
 
 #endif /* GPIO_STM32_H */

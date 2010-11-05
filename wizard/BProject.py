@@ -28,7 +28,6 @@
 #
 # Copyright 2008 Develer S.r.l. (http://www.develer.com/)
 #
-# $Id$
 #
 # Author: Lorenzo Berni <duplo@develer.com>
 #
@@ -245,7 +244,7 @@ class BProject(object):
                 try:
                     to_be_parsed, module_dict = loadModuleDefinition(comment_list[0])
                 except ParseError, err:
-                    raise DefineException.ModuleDefineException(path, err.line_number, err.line)
+                    raise DefineException.ModuleDefineException(os.path.join(path, filename), err.line_number, err.line)
                 for module, information in module_dict.items():
                     if "depends" not in information:
                         information["depends"] = ()
@@ -283,7 +282,7 @@ class BProject(object):
                         list_dict = loadDefineLists(comment_list[1:])
                         list_info_dict.update(list_dict)
                     except ParseError, err:
-                        raise DefineException.EnumDefineException(path, err.line_number, err.line)
+                        raise DefineException.EnumDefineException(os.path.join(path, filename), err.line_number, err.line)
         for tag in self.infos["CPU_INFOS"]["CPU_TAGS"]:
             for filename, path in self.findDefinitions("*_" + tag + ".h"):
                 comment_list = getCommentList(open(path + "/" + filename, "r").read())
@@ -384,8 +383,11 @@ class BProject(object):
             self._mergeSources(self.bertos_maindir, self.srcdir, self.old_srcdir)
             # Copy all the hw files
             self._writeHwFiles(self.bertos_srcdir, self.hwdir)
-            # Destination wizard mk file
-            self._writeWizardMkFile()
+
+        # Destination wizard mk file (it seems that this file need to be
+        # rewritten also if the project is a preset)...
+        self._writeWizardMkFile()
+
         # Set properly the autoenabled parameters
         self._setupAutoenabledParameters()
         # Copy all the configuration files

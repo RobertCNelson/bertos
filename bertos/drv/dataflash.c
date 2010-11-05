@@ -31,7 +31,6 @@
  *
  * \brief Function library for dataflash AT45DB family (implementation).
  *
- * \version $Id$
  * \author Daniele Basile <asterix@develer.com>
  * \author Francesco Sacchi <batt@develer.com>
  */
@@ -52,7 +51,7 @@
 
 #include <fs/battfs.h>
 
-#include <kern/kfile.h>
+#include <io/kfile.h>
 
 #include <cpu/power.h> /* cpu_relax() */
 
@@ -278,7 +277,7 @@ static void dataflash_loadPage(DataFlash *fd, dataflash_page_t page_addr)
 }
 
 /* Battfs disk interface section */
-
+#if 0
 static size_t dataflash_disk_page_read(struct BattFsSuper *d, pgcnt_t page, pgaddr_t addr, void *buf, size_t len)
 {
 	DataFlash *fd = DATAFLASH_CAST((KFile *)d->disk_ctx);
@@ -364,6 +363,7 @@ bool dataflash_diskInit(struct BattFsSuper *d, DataFlash *fd, pgcnt_t *page_arra
 	d->page_array = page_array;
 	return d->page_array && fd;
 }
+#endif
 
 /* Kfile interface section */
 

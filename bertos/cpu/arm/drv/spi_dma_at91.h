@@ -34,7 +34,6 @@
  *
  * \note Only one copy of SpiDmaAt91 is allowed for each application.
  *
- * \version $Id$
  * \author Francesco Sacchi <batt@develer.com>
  * \author Luca Ottaviano <lottaviano@develer.com>
  */
@@ -42,7 +41,7 @@
 #ifndef DRV_SPI_DMA_AT91_H
 #define DRV_SPI_DMA_AT91_H
 
-#include <kern/kfile.h>
+#include <io/kfile.h>
 
 typedef struct SpiDmaAt91
 {

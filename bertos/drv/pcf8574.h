@@ -32,7 +32,6 @@
  *
  * \brief PCF8574 i2c port expander driver.
  *
- * \version $Id$
  * \author Francesco Sacchi <batt@develer.com>
  *
  * $WIZ$ module_name = "pcf8574"
@@ -42,7 +41,21 @@
 #ifndef DRV_PCF8574_H
 #define DRV_PCF8574_H
 
+#include "cfg/cfg_i2c.h"
+
 #include <cfg/compiler.h>
+
+#include <drv/i2c.h>
+
+#if COMPILER_C99
+	#define pcf8574_init(...)       PP_CAT(pcf8574_init ## _, COUNT_PARMS(__VA_ARGS__)) (__VA_ARGS__)
+	#define pcf8574_get(...)        PP_CAT(pcf8574_get ## _, COUNT_PARMS(__VA_ARGS__)) (__VA_ARGS__)
+	#define pcf8574_put(...)        PP_CAT(pcf8574_put ## _, COUNT_PARMS(__VA_ARGS__)) (__VA_ARGS__)
+#else
+	#define pcf8574_init(args...)   PP_CAT(pcf8574_init ## _, COUNT_PARMS(args)) (args)
+	#define pcf8574_get(args...)    PP_CAT(pcf8574_get ## _, COUNT_PARMS(args)) (args)
+	#define pcf8574_put(args...)    PP_CAT(pcf8574_put ## _, COUNT_PARMS(args)) (args)
+#endif
 
 typedef uint8_t pcf8574_addr;
 
@@ -56,8 +69,40 @@ typedef struct Pcf8574
 
 #define PCF8574ID 0x40 ///< I2C address
 
-int pcf8574_get(Pcf8574 *pcf);
-bool pcf8574_put(Pcf8574 *pcf, uint8_t data);
-bool pcf8574_init(Pcf8574 *pcf, pcf8574_addr addr);
+/**
+ * Read PCF8574 \a pcf bit status.
+ * \return the pins status or EOF on errors.
+ */
+int pcf8574_get_2(I2c *i2c, Pcf8574 *pcf);
+
+/**
+ * Write to PCF8574 \a pcf port \a data.
+ * \return true if ok, false on errors.
+ */
+bool pcf8574_put_3(I2c *i2c, Pcf8574 *pcf, uint8_t data);
+
+/**
+ * Init a PCF8574 on the bus with addr \a addr.
+ * \return true if device is found, false otherwise.
+ */
+bool pcf8574_init_3(I2c *i2c, Pcf8574 *pcf, pcf8574_addr addr);
+
+#if !CONFIG_I2C_DISABLE_OLD_API
+
+DEPRECATED INLINE int pcf8574_get_1(Pcf8574 *pcf)
+{
+	return pcf8574_get_2(&local_i2c_old_api, pcf);
+}
+
+DEPRECATED INLINE bool pcf8574_put_2(Pcf8574 *pcf, uint8_t data)
+{
+	return pcf8574_put_3(&local_i2c_old_api, pcf, data);
+}
+
+DEPRECATED INLINE bool pcf8574_init_2(Pcf8574 *pcf, pcf8574_addr addr)
+{
+	return pcf8574_init_3(&local_i2c_old_api, pcf, addr);
+}
+#endif /* !CONFIG_I2C_DISABLE_OLD_API */
 
 #endif /* DRV_PCF8574_H */

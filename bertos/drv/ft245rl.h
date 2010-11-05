@@ -33,7 +33,6 @@
  * \brief Function library for Accessing FT245RL USB interface.
  *
  *
- * \version $Id$
  * \author Francesco Sacchi <batt@develer.com>
  *
  * $WIZ$ module_name = "ft245rl"
@@ -45,7 +44,7 @@
 #ifndef DRV_FT245RL_H
 #define DRV_FT245RL_H
 
-#include <kern/kfile.h>
+#include <io/kfile.h>
 #include <cfg/compiler.h>
 
 /**

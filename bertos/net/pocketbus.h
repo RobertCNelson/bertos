@@ -29,7 +29,6 @@
  * Copyright 2007 Develer S.r.l. (http://www.develer.com/)
  * -->
  *
- * \version $Id$
  *
  * \author Francesco Sacchi <batt@develer.com>
  *
@@ -48,7 +47,7 @@
 
 #include <algo/rotating_hash.h>
 
-#include <kern/kfile.h>
+#include <io/kfile.h>
 
 /**
  * pocketBus special characters definitions.

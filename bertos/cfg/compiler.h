@@ -33,7 +33,6 @@
  *
  * \brief Additional support macros for compiler independance
  *
- * \version $Id$
  * \author Bernie Innocenti <bernie@codewiz.org>
  */
 
@@ -73,6 +72,34 @@
 #define PP_STRINGIZE(x)     PP_STRINGIZE__(x)
 #define PP_STRINGIZE__(x)   #x
 
+
+/**
+ */
+#if COMPILER_C99
+	#define COUNT_PARMS2(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _, ...) _
+	#define COUNT_PARMS(...) \
+			COUNT_PARMS2(11 , ## __VA_ARGS__, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+
+	/**
+	 * usage:
+	 * \code
+	 * #define foo_init(...) PP_CAT(foo_init_, COUNT_PARMS(__VA_ARGS__)) (__VA_ARGS__)
+	 * \endcode
+	 */
+
+#else
+	#define COUNT_PARMS2(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _, ...) _
+	#define COUNT_PARMS(args...) \
+			COUNT_PARMS2(11 , ## args, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+
+	/**
+	 * usage:
+	 * \code
+	 * #define foo_init(args...) PP_CAT(foo_init_, COUNT_PARMS(args)) (args)
+	 * \endcode
+	 */
+
+#endif
 
 #if defined(__IAR_SYSTEMS_ICC) || defined(__IAR_SYSTEMS_ICC__)
 
@@ -182,6 +209,7 @@
 	#define RESTRICT                __restrict__
 	#define MUST_CHECK              __attribute__((warn_unused_result))
 	#define PACKED                  __attribute__((packed))
+	#define ALIGNED(x)              __attribute__ ((__aligned__(x)))
 	#if CPU_ARM | CPU_CM3
 		#define NAKED		__attribute__((naked))
 	#else
@@ -333,6 +361,9 @@
 #ifndef PACKED
 #define PACKED                 /* nothing */
 #endif
+#ifndef ALIGNED
+#define ALIGNED                /* nothing */
+#endif
 #ifndef MEMORY_BARRIER
 #define MEMORY_BARRIER         /* nothing */
 #warning No memory barrier defined for select compiler. If you use the kernel check it.
@@ -459,8 +490,8 @@ typedef unsigned char sigmask_t; /**< Type for signal masks. */
 		typedef long ssize_t;
 	#elif CPU_ARM || CPU_CM3
 		typedef int ssize_t;
-	#elif CPU_AVR
-		/* 16bit (missing in avr-libc's sys/types.h). */
+	#elif CPU_AVR || CPU_MSP430
+		/* 16bit (missing in avr-/msp430-libc's sys/types.h). */
 		typedef int ssize_t;
 	#else
 		#error Unknown CPU
@@ -504,7 +535,22 @@ typedef unsigned char sigmask_t; /**< Type for signal masks. */
 	 *
 	 * \note This macro is non-standard, but implements a very common idiom
 	 */
-	#define countof(a)  (sizeof(a) / sizeof(*(a)))
+	#if defined(__GNUC__) && !defined(__cplusplus)
+		/*
+		 * Perform a compile time type checking: countof() can only
+		 * work with static arrays, so throw a compile time error if a
+		 * pointer is passed as argument.
+		 *
+		 * NOTE: the construct __builtin_types_compatible_p() is only
+		 * available for C.
+		 */
+		#define countof(a) (sizeof(a) / sizeof(*(a)) +		\
+				STATIC_ASSERT_EXPR(			\
+					!__builtin_types_compatible_p(	\
+						typeof(a), typeof(&a[0]))))
+	#else
+		#define countof(a)  (sizeof(a) / sizeof(*(a)))
+	#endif
 #endif
 #ifndef alignof
 	/**
@@ -537,6 +583,13 @@ typedef unsigned char sigmask_t; /**< Type for signal masks. */
 /** Issue a compilation error if the \a condition is false */
 #define STATIC_ASSERT(condition)  \
 	UNUSED_VAR(extern char, STATIC_ASSERTION_FAILED__[(condition) ? 1 : -1])
+
+/**
+ * Issue a compilation error if \a __cond is false (this can be used inside an
+ * expression).
+ */
+#define STATIC_ASSERT_EXPR(__cond) \
+	(sizeof(struct { int STATIC_ASSERTION_FAILED__:!!(__cond); }) * 0)
 
 #ifndef ASSERT_TYPE_EQUAL
 	/** Ensure two variables have the same type. */

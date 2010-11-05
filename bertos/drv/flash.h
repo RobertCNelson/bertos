@@ -36,74 +36,87 @@
 * \author Daniele Basile <asterix@develer.com>
 *
 * $WIZ$ module_name = "flash"
-* $WIZ$ module_depends = "kfile"
+* $WIZ$ module_depends = "kfile", "kfile_block", "kblock"
+* $WIZ$ module_configuration = "bertos/cfg/cfg_emb_flash.h"
 */
 
 #ifndef DRV_FLASH_H
 #define DRV_FLASH_H
 
+#include "cfg/cfg_emb_flash.h"
+
 #include <cfg/macros.h>
-#include <cfg/module.h>
+#include <cfg/compiler.h>
 
+#include <io/kblock.h>
+#include <io/kfile.h>
+#include <io/kfile_block.h>
 
-#include CPU_HEADER(flash)
+#include <cpu/attr.h>
+
+#if COMPILER_C99
+	#define flash_init(...)           PP_CAT(flash_init_, COUNT_PARMS(__VA_ARGS__)) (__VA_ARGS__)
+#else
+	#define flash_init(args...)       PP_CAT(flash_init_, COUNT_PARMS(args)) (args)
+#endif
+
+/*
+ * Embedded flash error flags
+ */
+#define FLASH_WR_OK             0     ///< Write ok.
+#define FLASH_NOT_ERASED     BV(1)    ///< Flash memory was not erased before to write it.
+#define FLASH_WR_PROTECT     BV(2)    ///< Write not allowed the flash memory was protected.
+#define FLASH_WR_TIMEOUT     BV(3)    ///< Timeout while writing
+#define FLASH_WR_ERR         BV(4)    ///< Invalid command and/or a bad keywords
+
+struct FlashHardware;
 
 /**
-* EmbFlash KFile context structure.
-*/
+ * EmbFlash KFile context structure.
+ */
 typedef struct Flash
 {
-	/**
-	 * File descriptor.
-	 */
-	KFile fd;
-
-	/**
-	 * Flag for checking if current page is modified.
-	 */
-	bool page_dirty;
-
-	/**
-	 * Current buffered page.
-	 */
-	page_t curr_page;
-
-	/**
-	 * Temporary buffer cointaing data block to
-	 * write on flash.
-	 */
-	uint8_t page_buf[FLASH_PAGE_SIZE];
+	KBlock blk;
+	struct FlashHardware *hw;
+	#if !CONFIG_FLASH_DISABLE_OLD_API
+	union {
+		KFile fd;
+		KFileBlock fdblk;
+	} DEPRECATED;
+	#endif /* !CONFIG_FLASH_DISABLE_OLD_API */
 } Flash;
 
 /**
-* ID for FLASH
-*/
-#define KFT_FLASH MAKE_ID('F', 'L', 'A', 'S')
-
-/**
-* Convert + ASSERT from generic KFile to Flash.
-*/
-INLINE Flash * FLASH_CAST(KFile *fd)
-{
-	ASSERT(fd->_type == KFT_FLASH);
-	return (Flash *)fd;
-}
-
-
-MOD_DEFINE(flash);
-
-/**
- *
- * Initialize PWM hw.
+ * ID for FLASH
  */
-INLINE void flash_init(Flash *fd)
-{
-	flash_hw_init(fd);
+#define KBT_FLASH MAKE_ID('F', 'L', 'A', 'S')
 
-	MOD_INIT(flash);
+/**
+* Convert + ASSERT from generic KBlock to Flash.
+*/
+INLINE Flash *FLASH_CAST(KBlock *fls)
+{
+	ASSERT(fls->priv.type == KBT_FLASH);
+	return (Flash *)fls;
 }
 
+void flash_hw_init(Flash *fls, int flags);
+void flash_hw_initUnbuffered(Flash *fls, int flags);
 
+#include CPU_HEADER(flash)
+
+#define FLASH_WRITE_ONCE   BV(0) ///< Allow only one write per block.
+#define FLASH_BUFFERED     BV(1) ///< Open flash memory using page caching, allowing the modification and partial write.
+
+#define flash_init_2(fls, flags)    (flags & FLASH_BUFFERED) ? \
+										flash_hw_initUnbuffered(fls, flags) : flash_hw_init(fls, flags)
+
+#if !CONFIG_FLASH_DISABLE_OLD_API
+INLINE DEPRECATED void flash_init_1(Flash *fls)
+{
+	flash_hw_init(fls, 0);
+	kfileblock_init(&fls->fdblk, &fls->blk);
+}
+#endif /* !CONFIG_FLASH_DISABLE_OLD_API */
 
 #endif /* DRV_FLASH_H */
-

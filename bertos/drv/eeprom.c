@@ -26,7 +26,7 @@
  * invalidate any other reasons why the executable file might be covered by
  * the GNU General Public License.
  *
- * Copyright 2003, 2004, 2005 Develer S.r.l. (http://www.develer.com/)
+ * Copyright 2003, 2004, 2005, 2010 Develer S.r.l. (http://www.develer.com/)
  *
  * -->
  *
@@ -38,16 +38,19 @@
 
 #include "eeprom.h"
 
-#include <cfg/macros.h>  // MIN()
+#include "cfg/cfg_i2c.h"
+#include "cfg/cfg_eeprom.h"
+
+/* Define logging setting (for cfg/log.h module). */
+#define LOG_LEVEL         EEPROM_LOG_LEVEL
+#define LOG_FORMAT        EEPROM_LOG_FORMAT
+#include <cfg/log.h>
 #include <cfg/debug.h>
-#include <cfg/module.h>  // MOD_CHECK()
+#include <cfg/macros.h>  // MIN()
 
 #include <cpu/attr.h>
+
 #include <drv/i2c.h>
-
-#include <drv/wdt.h>
-
-#include <cpu/byteorder.h> // cpu_to_be16()
 
 #include <string.h>  // memset()
 
@@ -103,297 +106,248 @@ static const EepromInfo mem_info[] =
 
 STATIC_ASSERT(countof(mem_info) == EEPROM_CNT);
 
+#define CHUNCK_SIZE     16
 
 /**
- * Copy \a size bytes from buffer \a buf to
- * eeprom.
+ * Erase EEPROM.
+ * \param eep is the Kblock context.
+ * \param addr eeprom address where start to erase
+ * \param size number of byte to erase
  */
-static size_t eeprom_writeRaw(struct KFile *_fd, const void *buf, size_t size)
+bool eeprom_erase(Eeprom *eep, e2addr_t addr, e2_size_t size)
 {
-	Eeprom *fd = EEPROM_CAST(_fd);
+	uint8_t tmp[CHUNCK_SIZE] = { [0 ... (CHUNCK_SIZE - 1)] = 0xFF };
+
+	while (size)
+	{
+		block_idx_t idx = addr / eep->blk.blk_size;
+		size_t offset = addr % eep->blk.blk_size;
+		size_t count = MIN(size, (e2_size_t)CHUNCK_SIZE);
+		size_t ret_len = eep->blk.priv.vt->writeDirect((KBlock *)eep, idx, tmp, offset, count);
+		size -= ret_len;
+		addr += ret_len;
+
+		if (ret_len != count)
+			return false;
+	}
+	return true;
+}
+
+/**
+ * Verify EEPROM.
+ * \param eep is the Kblock context.
+ * \param addr eeprom address where start to verify.
+ * \param buf buffer of data to compare with eeprom data read.
+ * \param size number of byte to verify.
+ */
+bool eeprom_verify(Eeprom *eep, e2addr_t addr, const void *buf, size_t size)
+{
+    uint8_t verify_buf[CHUNCK_SIZE];
+	while (size)
+	{
+		block_idx_t idx = addr / eep->blk.blk_size;
+		size_t offset = addr % eep->blk.blk_size;
+		size_t count = MIN(size, (size_t)CHUNCK_SIZE);
+
+		size_t ret_len = eep->blk.priv.vt->readDirect((KBlock *)eep, idx, verify_buf, offset, count);
+
+		if (ret_len != count)
+		{
+			LOG_ERR("Verify read fail.\n");
+			return false;
+		}
+
+		if (memcmp(buf, verify_buf, ret_len) != 0)
+		{
+			LOG_ERR("Data mismatch!\n");
+			return false;
+		}
+
+		size -= ret_len;
+		addr += ret_len;
+		buf = ((const char *)buf) + ret_len;
+	}
+	return true;
+}
+
+
+static size_t eeprom_write(KBlock *blk, block_idx_t idx, const void *buf, size_t offset, size_t size)
+{
+	Eeprom *eep = EEPROM_CAST_KBLOCK(blk);
 	e2dev_addr_t dev_addr;
 	uint8_t addr_buf[2];
 	uint8_t addr_len;
-	size_t wr_len = 0;
-
-	e2blk_size_t blk_size = mem_info[fd->type].blk_size;
+	uint32_t abs_addr = blk->blk_size * idx + offset;
 
 	STATIC_ASSERT(countof(addr_buf) <= sizeof(e2addr_t));
 
-	/* clamp size to memory limit (otherwise may roll back) */
-	ASSERT(_fd->seek_pos + (kfile_off_t)size <= (kfile_off_t)_fd->size);
-	size = MIN((kfile_off_t)size, _fd->size - _fd->seek_pos);
 
-	if (mem_info[fd->type].has_dev_addr)
+	/* clamp size to memory limit (otherwise may roll back) */
+	ASSERT(idx <= blk->blk_cnt);
+	size = MIN(size, blk->blk_size - offset);
+
+	if (mem_info[eep->type].has_dev_addr)
 	{
-		dev_addr = fd->addr;
+		dev_addr = eep->addr;
 		addr_len = 2;
 	}
 	else
 	{
-		dev_addr = (e2dev_addr_t)((fd->fd.seek_pos >> 8) & 0x07);
+		dev_addr = (e2dev_addr_t)((abs_addr >> 8) & 0x07);
 		addr_len = 1;
 	}
 
-	while (size)
+	if (mem_info[eep->type].has_dev_addr)
 	{
-		/*
-		 * Split write in multiple sequential mode operations that
-		 * don't cross page boundaries.
-		 */
-		size_t count = MIN(size, (size_t)(blk_size - (fd->fd.seek_pos & (blk_size - 1))));
-
-		if (mem_info[fd->type].has_dev_addr)
-		{
-			addr_buf[0] = (fd->fd.seek_pos >> 8) & 0xFF;
-			addr_buf[1] = (fd->fd.seek_pos & 0xFF);
-		}
-		else
-		{
-			dev_addr = (e2dev_addr_t)((fd->fd.seek_pos >> 8) & 0x07);
-			addr_buf[0] = (fd->fd.seek_pos & 0xFF);
-		}
-
-
-		if (!(i2c_start_w(EEPROM_ADDR(dev_addr))
-			&& i2c_send(addr_buf, addr_len)
-			&& i2c_send(buf, count)))
-		{
-			i2c_stop();
-			return wr_len;
-		}
-
-		i2c_stop();
-
-		/* Update count and addr for next operation */
-		size -= count;
-		fd->fd.seek_pos += count;
-		buf = ((const char *)buf) + count;
-		wr_len += count;
+		addr_buf[0] = (abs_addr >> 8) & 0xFF;
+		addr_buf[1] = (abs_addr & 0xFF);
+	}
+	else
+	{
+		dev_addr = (e2dev_addr_t)((abs_addr >> 8) & 0x07);
+		addr_buf[0] = (abs_addr & 0xFF);
 	}
 
-	return wr_len;
+	i2c_start_w(eep->i2c, EEPROM_ADDR(dev_addr),  addr_len + size, I2C_STOP);
+	i2c_write(eep->i2c, addr_buf, addr_len);
+	i2c_write(eep->i2c, buf, size);
+
+	if (i2c_error(eep->i2c))
+		return 0;
+
+	return size;
 }
 
-/**
- * Copy \a size bytes from buffer \a _buf to
- * eeprom.
- * \note Writes are verified and if buffer content
- *       is not matching we retry 5 times max.
- */
-static size_t eeprom_writeVerify(struct KFile *_fd, const void *_buf, size_t size)
+static size_t eeprom_readDirect(struct KBlock *_blk, block_idx_t idx, void *_buf, size_t offset, size_t size)
 {
-	Eeprom *fd = EEPROM_CAST(_fd);
-	int retries = 5;
-	size_t wr_len = 0;
-
-	while (retries--)
-	{
-		wr_len = eeprom_writeRaw(_fd, _buf, size);
-		/* rewind to verify what we have just written */
-		kfile_seek(_fd, -(kfile_off_t)wr_len, KSM_SEEK_CUR);
-		if (wr_len == size
-		 && eeprom_verify(fd, _buf, wr_len))
-		{
-			/* Forward to go after what we have written*/
-			kfile_seek(_fd, wr_len, KSM_SEEK_CUR);
-			return wr_len;
-		}
-	}
-	return wr_len;
-}
-
-
-/**
- * Copy \a size bytes
- * from eeprom to RAM to buffer \a _buf.
- *
- * \return the number of bytes read.
- */
-static size_t eeprom_read(struct KFile *_fd, void *_buf, size_t size)
-{
-	Eeprom *fd = EEPROM_CAST(_fd);
+	Eeprom *blk = EEPROM_CAST_KBLOCK(_blk);
 	uint8_t addr_buf[2];
 	uint8_t addr_len;
 	size_t rd_len = 0;
 	uint8_t *buf = (uint8_t *)_buf;
+	uint32_t abs_addr = mem_info[blk->type].blk_size * idx + offset;
 
 	STATIC_ASSERT(countof(addr_buf) <= sizeof(e2addr_t));
 
 	/* clamp size to memory limit (otherwise may roll back) */
-	ASSERT(_fd->seek_pos + (kfile_off_t)size <= (kfile_off_t)_fd->size);
-	size = MIN((kfile_off_t)size, _fd->size - _fd->seek_pos);
+	ASSERT(idx <= blk->blk.blk_cnt);
+	size = MIN(size, blk->blk.blk_size - offset);
 
 	e2dev_addr_t dev_addr;
-	if (mem_info[fd->type].has_dev_addr)
+	if (mem_info[blk->type].has_dev_addr)
 	{
-		dev_addr = fd->addr;
+		dev_addr = blk->addr;
 		addr_len = 2;
-		addr_buf[0] = (fd->fd.seek_pos >> 8) & 0xFF;
-		addr_buf[1] = (fd->fd.seek_pos & 0xFF);
+		addr_buf[0] = (abs_addr >> 8) & 0xFF;
+		addr_buf[1] = (abs_addr & 0xFF);
 	}
 	else
 	{
-		dev_addr = (e2dev_addr_t)((fd->fd.seek_pos >> 8) & 0x07);
+		dev_addr = (e2dev_addr_t)((abs_addr >> 8) & 0x07);
 		addr_len = 1;
-		addr_buf[0] = (fd->fd.seek_pos & 0xFF);
+		addr_buf[0] = (abs_addr & 0xFF);
 	}
 
 
-	if (!(i2c_start_w(EEPROM_ADDR(dev_addr))
-	   && i2c_send(addr_buf, addr_len)
-	   && i2c_start_r(EEPROM_ADDR(dev_addr))))
-	{
-		i2c_stop();
-		return 0;
-	}
+	i2c_start_w(blk->i2c, EEPROM_ADDR(dev_addr),  addr_len, I2C_NOSTOP);
+	i2c_write(blk->i2c, addr_buf, addr_len);
 
-	while (size--)
-	{
-		/*
-		 * The last byte read does not have an ACK
-		 * to stop communication.
-		 */
-		int c = i2c_get(size);
+	i2c_start_r(blk->i2c, EEPROM_ADDR(dev_addr), size, I2C_STOP);
+	i2c_read(blk->i2c, buf, size);
 
-		if (c == EOF)
-			break;
+	if (i2c_error(blk->i2c))
+		   return rd_len;
 
-		*buf++ = c;
-		fd->fd.seek_pos++;
-		rd_len++;
-	}
+	rd_len += size;
 
-	i2c_stop();
 	return rd_len;
 }
 
-/**
- * Check that the contents of an EEPROM range
- * match with a provided data buffer.
- *
- * \return true on success.
- * \note Seek position of \a fd will not change.
- */
-bool eeprom_verify(Eeprom *fd, const void *buf, size_t count)
+static size_t eeprom_writeDirect(KBlock *blk, block_idx_t idx, const void *buf, size_t offset, size_t size)
 {
-	uint8_t verify_buf[16];
-	bool result = true;
-
-	/* Save seek position */
-	kfile_off_t prev_seek = fd->fd.seek_pos;
-
-	while (count && result)
+	Eeprom *eep = EEPROM_CAST_KBLOCK(blk);
+	if (!eep->verify)
+		return eeprom_write(blk, idx, buf, offset, size);
+	else
 	{
-		/* Split read in smaller pieces */
-		size_t size = MIN(count, sizeof verify_buf);
-
-		/* Read back buffer */
-		if (eeprom_read(&fd->fd, verify_buf, size))
+		int retries = 5;
+		while (retries--)
 		{
-			if (memcmp(buf, verify_buf, size) != 0)
+			uint8_t verify_buf[CHUNCK_SIZE];
+			size_t wr_len = 0;
+			size_t len = 0;
+			while (size)
 			{
-				TRACEMSG("Data mismatch!");
-				result = false;
+				/* Split read in smaller pieces */
+				size_t count = MIN(size, (size_t)CHUNCK_SIZE);
+				if ((wr_len = eeprom_write(blk, idx, buf, offset, count)) != 0)
+				{
+					if (eeprom_readDirect(blk, idx, verify_buf, offset, count) != wr_len)
+					{
+						LOG_ERR("Verify read fail.\n");
+						return 0;
+					}
+					else if (memcmp(buf, verify_buf, wr_len) != 0)
+					{
+						LOG_ERR("Data mismatch!\n");
+						continue;
+					}
+				}
+				else
+				{
+					LOG_ERR("Write fail.\n");
+					return 0;
+				}
+				size -= wr_len;
+				len += wr_len;
+				buf = ((const char *)buf) + wr_len;
 			}
+			return len;
 		}
-		else
-		{
-			TRACEMSG("Read error!");
-			result = false;
-		}
-
-		/* Update count and addr for next operation */
-		count -= size;
-		buf = ((const char *)buf) + size;
 	}
 
-	/* Restore previous seek position */
-	fd->fd.seek_pos = prev_seek;
-	return result;
+	return 0;
 }
 
-/**
- * Erase specified part of eeprom, writing 0xFF.
- *
- * \a addr   starting address
- * \a count  length of block to erase
- * \note Seek position is unchanged.
- * \return true if ok, false otherwise.
- */
-bool eeprom_erase(Eeprom *fd, e2addr_t addr, e2_size_t count)
+static int kblockEeprom_dummy(UNUSED_ARG(struct KBlock *,b))
 {
-	e2blk_size_t blk_size = mem_info[fd->type].blk_size;
-	uint8_t buf[blk_size];
-	kfile_off_t prev_off = fd->fd.seek_pos;
-	bool res = true;
-	size_t size;
-
-	memset(buf, 0xFF, blk_size);
-
-
-	kfile_seek(&fd->fd, addr, KSM_SEEK_SET);
-
-	/*
-	 * Optimization: this first write id used to realign
-	 * current address to block boundaries.
-	 */
-
-	wdt_reset();
-	size = MIN(count, (e2_size_t)(blk_size - (addr & (blk_size - 1))));
-	if (kfile_write(&fd->fd, buf, size) != size)
-	{
-		fd->fd.seek_pos = prev_off;
-		return false;
-	}
-	count -= size;
-
-	/* Clear all */
-	while (count)
-	{
-		/* Long operation, reset watchdog */
-		wdt_reset();
-
-		size = MIN(count, (e2_size_t)sizeof buf);
-		if (kfile_write(&fd->fd, buf, size) != size)
-		{
-			res = false;
-			break;
-		}
-
-		count -= size;
-	}
-	fd->fd.seek_pos = prev_off;
-	return res;
+	return 0;
 }
 
+
+static const KBlockVTable eeprom_unbuffered_vt =
+{
+	.readDirect = eeprom_readDirect,
+	.writeDirect = eeprom_writeDirect,
+
+	.error = kblockEeprom_dummy,
+	.clearerr = (kblock_clearerr_t)kblockEeprom_dummy,
+};
 
 /**
  * Initialize EEPROM module.
- * \a fd is the Kfile context.
- * \a type is the eeprom device we want to initialize (\see EepromType)
- * \a addr is the i2c devide address (usually pins A0, A1, A2).
- * \a verify is true if you want that every write operation will be verified.
+ * \param eep is the Kblock context.
+ * \param type is the eeprom device we want to initialize (\see EepromType)
+ * \param i2c context for i2c channel
+ * \param addr is the i2c devide address (usually pins A0, A1, A2).
+ * \param verify enable the write check.
  */
-void eeprom_init(Eeprom *fd, EepromType type, e2dev_addr_t addr, bool verify)
+void eeprom_init_5(Eeprom *eep, I2c *i2c, EepromType type, e2dev_addr_t addr, bool verify)
 {
-	MOD_CHECK(i2c);
 	ASSERT(type < EEPROM_CNT);
 
-	memset(fd, 0, sizeof(*fd));
-	DB(fd->fd._type = KFT_EEPROM);
+	memset(eep, 0, sizeof(*eep));
+	DB(eep->blk.priv.type = KBT_EEPROM);
 
-	fd->type = type;
-	fd->addr = addr;
-	fd->fd.size = mem_info[fd->type].e2_size;
+	eep->type = type;
+	eep->addr = addr;
+	eep->i2c = i2c;
+	eep->verify = verify;
 
-	// Setup eeprom programming functions.
-	fd->fd.read = eeprom_read;
-	if (verify)
-		fd->fd.write = eeprom_writeVerify;
-	else
-		fd->fd.write = eeprom_writeRaw;
-	fd->fd.close = kfile_genericClose;
-
-	fd->fd.seek = kfile_genericSeek;
+	eep->blk.blk_size = mem_info[type].blk_size;
+	eep->blk.blk_cnt = mem_info[type].e2_size / mem_info[type].blk_size;
+	eep->blk.priv.flags |= KB_PARTIAL_WRITE;
+	eep->blk.priv.vt = &eeprom_unbuffered_vt;
 }
+
+

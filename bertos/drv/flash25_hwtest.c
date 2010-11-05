@@ -32,7 +32,6 @@
  *
  *  \brief Test function for serial Flash memory.
  *
- * \version $Id$
  * \author Daniele Basile <asterix@develer.com>
  */
 
@@ -43,7 +42,7 @@
  */
 
 
-#include <kern/kfile.h>
+#include <io/kfile.h>
 
 #include <drv/flash25.h>
 

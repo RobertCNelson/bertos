@@ -33,50 +33,25 @@
  * \brief TAS5706A Power DAC i2c driver.
  *
  *
- * \version $Id$
  * \author Francesco Sacchi <batt@develer.com>
+ * \author Daniele Basile <asterix@develer.com>
  */
 
 #include "tas5706a.h"
+
+#include "hw/hw_tas5706a.h"
+
+#include "cfg/cfg_tas5706a.h"
+#include "cfg/cfg_i2c.h"
+
 #include <cfg/module.h>
 
 #include <drv/i2c.h>
 #include <drv/timer.h>
 
-#include "hw/hw_tas5706a.h"
-#include "cfg/cfg_tas5706a.h"
-
-#define TAS_ADDR 0x36
-
 typedef uint8_t tas_addr_t;
 
-static bool tas5706a_send(tas_addr_t addr, const void *buf, size_t len)
-{
-	bool ret = i2c_start_w(TAS_ADDR) && i2c_put(addr) && i2c_send(buf, len);
-	i2c_stop();
-	return ret;
-}
-
-INLINE bool tas5706a_putc(tas_addr_t addr, uint8_t ch)
-{
-	return tas5706a_send(addr, &ch, sizeof(ch));
-}
-
-static bool tas5706a_recv(tas_addr_t addr, void *buf, size_t len)
-{
-	bool ret = i2c_start_w(TAS_ADDR) && i2c_put(addr) && i2c_start_r(TAS_ADDR) && i2c_recv(buf, len);
-	i2c_stop();
-	return ret;
-}
-
-INLINE int tas5706a_getc(tas_addr_t addr)
-{
-	uint8_t ch;
-	if (tas5706a_recv(addr, &ch, sizeof(ch)))
-		return (int)(uint8_t)ch;
-	else
-		return EOF;
-}
+#define TAS_ADDR 0x36
 
 #define TRIM_REG   0x1B
 #define SYS_REG2   0x05
@@ -85,32 +60,40 @@ INLINE int tas5706a_getc(tas_addr_t addr)
 
 #define DB_TO_REG(db) ((24 - (db)) * 2)
 
-void tas5706a_init(void)
-{
-	MOD_CHECK(i2c);
-	MOD_CHECK(timer);
-	TAS5706A_PIN_INIT();
-	timer_delay(200);
-	TAS5706A_SETPOWERDOWN(false);
-	TAS5706A_SETMUTE(false);
-	TAS5706A_MCLK_INIT();
-	timer_delay(2);
-	TAS5706A_SETRESET(false);
-	timer_delay(20);
-	tas5706a_putc(TRIM_REG, 0x00);
-
-	tas5706a_putc(VOLUME_REG, DB_TO_REG(CONFIG_TAS_MAX_VOL));
-
-	/* Unmute */
-	tas5706a_putc(SYS_REG2, 0);
-}
-
 #define CH1_VOL_REG 0x08
 #define CH2_VOL_REG 0x09
 #define CH3_VOL_REG 0x0A
 #define CH4_VOL_REG 0x0B
 
-void tas5706a_setVolume(Tas5706aCh ch, tas5706a_vol_t vol)
+
+INLINE bool tas5706a_putc(I2c *i2c, tas_addr_t addr, uint8_t ch)
+{
+	i2c_start_w(i2c, TAS_ADDR, 2, I2C_STOP);
+	i2c_putc(i2c, addr);
+	i2c_putc(i2c, ch);
+
+	if (i2c_error(i2c))
+		return false;
+
+	return true;
+}
+
+INLINE int tas5706a_getc(I2c *i2c, tas_addr_t addr)
+{
+	int ch;
+
+	i2c_start_w(i2c, TAS_ADDR, 2, I2C_NOSTOP);
+	i2c_putc(i2c, addr);
+	i2c_start_r(i2c, TAS_ADDR, 1, I2C_STOP);
+	ch = (int)(uint8_t)i2c_getc(i2c);
+
+	if (i2c_error(i2c))
+		return EOF;
+
+	return ch;
+}
+
+void tas5706a_setVolume_3(I2c *i2c, Tas5706aCh ch, tas5706a_vol_t vol)
 {
 	ASSERT(ch < TAS_CNT);
 	ASSERT(vol <= TAS_VOL_MAX);
@@ -134,13 +117,36 @@ void tas5706a_setVolume(Tas5706aCh ch, tas5706a_vol_t vol)
 
 	uint8_t vol_att = 0xff - ((vol * 0xff) / TAS_VOL_MAX);
 
-	tas5706a_putc(addr1, vol_att);
-	tas5706a_putc(addr2, vol_att);
+	tas5706a_putc(i2c, addr1, vol_att);
+	tas5706a_putc(i2c, addr2, vol_att);
 }
 
-void tas5706a_setLowPower(bool val)
+void tas5706a_setLowPower_2(I2c *i2c, bool val)
 {
+	ASSERT(i2c);
+
 	TAS5706A_SETPOWERDOWN(val);
 	TAS5706A_SETMUTE(val);
 }
 
+
+void tas5706a_init_1(I2c *i2c)
+{
+	ASSERT(i2c);
+	MOD_CHECK(timer);
+
+	TAS5706A_PIN_INIT();
+	timer_delay(200);
+	TAS5706A_SETPOWERDOWN(false);
+	TAS5706A_SETMUTE(false);
+	TAS5706A_MCLK_INIT();
+	timer_delay(2);
+	TAS5706A_SETRESET(false);
+	timer_delay(20);
+	tas5706a_putc(i2c, TRIM_REG, 0x00);
+
+	tas5706a_putc(i2c, VOLUME_REG, DB_TO_REG(CONFIG_TAS_MAX_VOL));
+
+	/* Unmute */
+	tas5706a_putc(i2c, SYS_REG2, 0);
+}

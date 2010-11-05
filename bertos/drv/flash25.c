@@ -36,7 +36,6 @@
  * Typicaly this kind of memory use an SPI bus, but you should
  * use another comunication channel you have defined.
  *
- * \version $Id$
  * \author Daniele Basile <asterix@develer.com>
  */
 
@@ -52,7 +51,7 @@
 #include <drv/timer.h>
 #include <drv/flash25.h>
 
-#include <kern/kfile.h>
+#include <io/kfile.h>
 
 #include <cpu/power.h> /* cpu_relax() */
 

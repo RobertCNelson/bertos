@@ -32,14 +32,13 @@
  *
  * \brief KFile interface over a FIFO buffer.
  *
- * \version $Id: cfg_adc.h 2348 2009-02-16 13:43:44Z duplo $
  * \author Francesco Sacchi <asterix@develer.com>
  */
 
 #include "kfile_fifo.h"
 #include "fifobuf.h"
 
-#include <kern/kfile.h>
+#include <io/kfile.h>
 
 #include <string.h>
 

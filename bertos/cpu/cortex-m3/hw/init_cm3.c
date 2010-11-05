@@ -35,23 +35,22 @@
  * \author Andrea Righi <arighi@develer.com>
  */
 
+#include "cfg/cfg_proc.h" /* CONFIG_KERN_PREEMPT */
+#include "switch_ctx_cm3.h"
+
 #include <cfg/compiler.h>
-#include <cfg/cfg_proc.h> /* CONFIG_KERN_PREEMPT */
-#include <kern/proc_p.h>
 #include <cfg/debug.h>
+
 #include <cpu/attr.h> /* PAUSE */
 #include <cpu/irq.h> /* IRQ_DISABLE */
 #include <cpu/types.h>
-#include <drv/irq_cm3.h>
-#include "switch_ctx_cm3.h"
 
-#if CPU_CM3_LM3S
-#include <drv/clock_lm3s.h>
-#include <io/lm3s.h>
-#elif CPU_CM3_STM32
-#include <drv/clock_stm32.h>
-#include <io/stm32.h>
-#endif
+#include <drv/irq_cm3.h>
+#include <drv/clock_cm3.h>
+
+#include <kern/proc_p.h>
+
+#include <io/cm3.h>
 
 extern size_t __text_end, __data_start, __data_end, __bss_start, __bss_end;
 
@@ -65,28 +64,6 @@ void __init2(void)
 	 */
 	IRQ_DISABLE;
 
-#if CPU_CM3_LM3S
-	/*
-	 * PLL may not function properly at default LDO setting.
-	 *
-	 * Description:
-	 *
-	 * In designs that enable and use the PLL module, unstable device
-	 * behavior may occur with the LDO set at its default of 2.5 volts or
-	 * below (minimum of 2.25 volts). Designs that do not use the PLL
-	 * module are not affected.
-	 *
-	 * Workaround: Prior to enabling the PLL module, it is recommended that
-	 * the default LDO voltage setting of 2.5 V be adjusted to 2.75 V using
-	 * the LDO Power Control (LDOPCTL) register.
-	 *
-	 * Silicon Revision Affected: A1, A2
-	 *
-	 * See also: Stellaris LM3S1968 A2 Errata documentation.
-	 */
-	if (REVISION_IS_A1 | REVISION_IS_A2)
-		HWREG(SYSCTL_LDOPCTL) = SYSCTL_LDOPCTL_2_75V;
-#endif
 	/* Set the appropriate clocking configuration */
 	clock_init();
 

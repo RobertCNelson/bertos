@@ -28,7 +28,6 @@
 #
 # Copyright 2008 Develer S.r.l. (http://www.develer.com/)
 #
-# $Id$
 #
 # Author: Lorenzo Berni <duplo@develer.com>
 #
@@ -83,12 +82,16 @@ def newProject():
 
 def editProject(project_file):
     info_dict = {}
+    # Progress dialog.
+    p_dialog = QProgressDialog(QApplication.instance().tr("Wait project loading"), QApplication.instance().tr("Cancel"), 0, 0)
     while(True):
+        p_dialog.show()
         # Empty project is the default fallback.
         QApplication.instance().project = BProject()
         try:
             QApplication.instance().project = BProject(project_file, info_dict)
         except VersionException:
+            p_dialog.hide()
             QMessageBox.critical(
                 None,
                 QObject().tr("BeRTOS version not found!"),
@@ -100,6 +103,7 @@ def editProject(project_file):
                 info_dict["BERTOS_PATH"] = version
             continue
         except ToolchainException, exc:
+            p_dialog.hide()
             QMessageBox.critical(
                 None,
                 QObject().tr("Toolchain not found!"),
@@ -113,6 +117,7 @@ def editProject(project_file):
             continue
         break
     dialog = BEditingDialog()
+    p_dialog.hide()
     dialog.exec_()
 
 def main():
@@ -120,10 +125,21 @@ def main():
     app.settings = QSettings("Develer", "Bertos Configurator")
     # Development utility lines, to be removed for production
     datadir = DATA_DIR
-    qrc, rcc = os.path.join(datadir, 'bertos.qrc'), os.path.join(datadir, 'bertos.rcc')
-    if not (hasattr(sys, "frozen") and sys.frozen) and newer(qrc, rcc):
-        os.system("rcc -binary %s -o %s" %(qrc, rcc))
-    QResource.registerResource(rcc)
+
+    # Something seems to not work, on Windows, using pyrcc4 with BeRTOS Wizard
+    # resources. So I'm restoring the old rcc-based resource generation
+    # system.
+    #
+    # qrc, bertos_rc = os.path.join(datadir, 'bertos.qrc'), os.path.join(datadir, 'bertos_rc.py')
+    # if not (hasattr(sys, "frozen") and sys.frozen) and newer(qrc, bertos_rc):
+    #     os.system("pyrcc4 \"%s\" -o \"%s\"" %(qrc, bertos_rc))
+    # import bertos_rc
+
+    qrc, rcc = os.path.join(datadir, 'bertos.qrc'), os.path.join(datadir, 'bertos.rcc') 
+    if not (hasattr(sys, "frozen") and sys.frozen) and newer(qrc, rcc): 
+        os.system("rcc -binary \"%s\" -o \"%s\"" %(qrc, rcc)) 
+    QResource.registerResource(rcc) 
+    
     if len(sys.argv) == 3 and sys.argv[1] == "--edit":
         editProject(os.path.abspath(sys.argv[2]))
     else:

@@ -32,14 +32,13 @@
  *
  * \brief KFile interface implementation in Posix systems.
  *
- * \version $Id$
  * \author Luca Ottaviano <lottaviano@develer.com>
  */
 
 #ifndef KFILE_POSIX_H
 #define KFILE_POSIX_H
 
-#include <kern/kfile.h>
+#include <io/kfile.h>
 #include <stdio.h>
 
 typedef struct KFilePosix

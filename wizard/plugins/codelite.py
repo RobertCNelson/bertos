@@ -28,7 +28,6 @@
 #
 # Copyright 2008 Develer S.r.l. (http://www.develer.com/)
 #
-# $Id$
 #
 # Author: Lorenzo Berni <duplo@develer.com>
 #
@@ -83,7 +82,12 @@ def findSources(path):
     if not path.endswith(os.sep):
         path += os.sep
     file_dict = {}
-    for root, dirs, files in os.walk(path):
+    # also follow all symlinks under POSIX OSes
+    if os.name == 'posix':
+        file_list = os.walk(path, followlinks=True)
+    else:
+        file_list = os.walk(path)
+    for root, dirs, files in file_list:
         if root.find("svn") == -1:
             file_dict[root.replace(path, "")] = {"dirs": [], "files": []}
             for dir in dirs:

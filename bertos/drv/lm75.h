@@ -46,12 +46,23 @@
 #include <cpu/types.h>
 
 #include <drv/ntc.h> // Macro and data type to manage celsius degree
+#include <drv/i2c.h>
 
-#define LM75_ADDRESS_BYTE    0x91
-#define LM75_PAD_BYTE        0x0
+#include <cpu/attr.h>
 
-deg_t lm75_read(uint8_t sens_addr);
+#define I2C_READBIT BV(0)
 
-void lm75_init(void);
+#if COMPILER_C99
+	#define lm75_read(...)        PP_CAT(lm75_read ## _, COUNT_PARMS(__VA_ARGS__)) (__VA_ARGS__)
+#else
+	#define lm75_read(args...)    PP_CAT(lm75_read ## _, COUNT_PARMS(args)) (args)
+#endif
+
+#if !CONFIG_I2C_DISABLE_OLD_API
+
+DEPRECATED deg_t lm75_read_1(uint8_t sens_addr);
+#endif /* !CONFIG_I2C_DISABLE_OLD_API */
+
+deg_t lm75_read_2(I2c *i2c, uint8_t sens_addr);
 
 #endif /* DRV_LM75_H */

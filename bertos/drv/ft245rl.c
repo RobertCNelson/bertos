@@ -36,7 +36,6 @@
  * This chip is a parallel USB interface with data flow control.
  * A kfile-like interface is supplied.
  *
- * \version $Id$
  * \author Francesco Sacchi <batt@develer.com>
  */
 
@@ -49,7 +48,7 @@
 
 #include <drv/timer.h>
 
-#include <kern/kfile.h>
+#include <io/kfile.h>
 
 #include <string.h>
 

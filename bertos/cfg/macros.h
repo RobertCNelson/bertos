@@ -32,7 +32,6 @@
  *
  * \brief Common and handy function macros
  *
- * \version $Id$
  * \author Bernie Innocenti <bernie@codewiz.org>
  * \author Giovanni Bajo <rasky@develer.com>
  */
@@ -94,6 +93,11 @@
 	#define MIN(a,b)	(((a) < (b)) ? (a) : (b))
 	#define MAX(a,b)	(((a) > (b)) ? (a) : (b))
 #endif /* !(COMPILER_STATEMENT_EXPRESSIONS && COMPILER_TYPEOF) */
+
+/** Align \p value to the next \p align boundary */
+#define ALIGN_UP(value, align)	(((value) & ((align) - 1)) ? \
+				(((value) + ((align) - 1)) & ~((align) - 1)) : \
+				(value))
 
 /** Bound \a x between \a min and \a max. */
 #define MINMAX(min,x,max)  (MIN(MAX(min, x), max))

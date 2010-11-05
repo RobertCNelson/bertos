@@ -120,6 +120,14 @@
 	#define SIZEOF_CPUSTACK_T 1
 	#define SIZEOF_CPUALIGNED_T SIZEOF_CPUSTACK_T
 
+#elif CPU_MSP430
+
+	typedef uint16_t cpu_flags_t;
+	typedef uint16_t cpu_stack_t;
+	typedef cpu_stack_t cpu_aligned_stack_t;
+	#define SIZEOF_CPUSTACK_T 2
+	#define SIZEOF_CPUALIGNED_T SIZEOF_CPUSTACK_T
+
 #else
 	#error No CPU_... defined.
 #endif
@@ -232,5 +240,15 @@ STATIC_ASSERT(sizeof(uint64_t) * CPU_BITS_PER_CHAR == 64);
 STATIC_ASSERT(sizeof(cpu_stack_t) == SIZEOF_CPUSTACK_T);
 STATIC_ASSERT(sizeof(cpu_aligned_stack_t) == SIZEOF_CPUALIGNED_T);
 STATIC_ASSERT(sizeof(size_t) == SIZEOF_SIZE_T);
+
+
+/**
+ * Macros for hardware access, both direct and via the bit-band region.
+ */
+/*\{*/
+#define HWREG(x)   (*((reg32_t *)(x)))
+#define HWREGH(x)  (*((reg16_t *)(x)))
+#define HWREGB(x)  (*((reg8_t *)(x)))
+/*\}*/
 
 #endif /* CPU_TYPES_H */

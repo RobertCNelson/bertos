@@ -40,6 +40,8 @@
 #include "cfg/cfg_proc.h"
 #include "cfg/cfg_wdt.h"
 
+#include <cfg/compiler.h>
+
 #if CONFIG_KERN
 	#include <kern/proc.h>
 #endif
@@ -66,6 +68,7 @@
  */
 INLINE void cpu_relax(void)
 {
+	MEMORY_BARRIER;
 #if CONFIG_KERN
 	if (proc_preemptAllowed())
 		proc_yield();

@@ -31,18 +31,22 @@
  *
  * \brief Function library for secure digital memory.
  *
- * \version $Id$
  * \author Francesco Sacchi <batt@develer.com>
  */
 
 
 #include "sd.h"
 #include "hw/hw_sd.h"
-#include <kern/kfile.h>
+#include <io/kfile.h>
+#include <io/kblock.h>
 #include <drv/timer.h>
 
 #include <fs/fat.h>
 
+#include "cfg/cfg_sd.h"
+
+#define LOG_LEVEL  SD_LOG_LEVEL
+#define LOG_FORMAT SD_LOG_FORMAT
 #include <cfg/log.h>
 #include <cpu/power.h>
 
@@ -62,39 +66,30 @@ typedef struct CardCSD
 #define SD_IN_IDLE    0x01
 #define SD_STARTTOKEN 0xFE
 
-#define TIMEOUT_NAC   256
-
+#define TIMEOUT_NAC   16384
 #define SD_DEFAULT_BLOCKLEN 512
-
-/**
- * SPI communication channel.
- */
-static KFile *fd;
-
-/**
- * Current SD status.
- */
-static bool sd_status;
 
 #define SD_BUSY_TIMEOUT ms_to_ticks(200)
 
-static bool sd_select(bool state)
+static bool sd_select(Sd *sd, bool state)
 {
+	KFile *fd = sd->ch;
+
 	if (state)
 	{
+		SD_CS_ON();
+
 		ticks_t start = timer_clock();
 		do
 		{
-			SD_CS_ON();
 			if (kfile_getc(fd) == 0xff)
 				return true;
-			SD_CS_OFF();
-			kfile_putc(0xff, fd);
-			kfile_flush(fd);
+
 			cpu_relax();
 		}
 		while (timer_clock() - start < SD_BUSY_TIMEOUT);
 
+		SD_CS_OFF();
 		LOG_ERR("sd_select timeout\n");
 		return false;
 	}
@@ -107,22 +102,23 @@ static bool sd_select(bool state)
 	}
 }
 
-static int16_t sd_waitR1(void)
+static int16_t sd_waitR1(Sd *sd)
 {
 	uint8_t datain;
 
 	for (int i = 0; i < TIMEOUT_NAC; i++)
 	{
-	  datain = kfile_getc(fd);
-	  if (datain != 0xff)
-		return (int16_t)datain;
+		datain = kfile_getc(sd->ch);
+		if (datain != 0xff)
+			return (int16_t)datain;
 	}
 	LOG_ERR("Timeout waiting R1\n");
 	return EOF;
 }
 
-static int16_t sd_sendCommand(uint8_t cmd, uint32_t param, uint8_t crc)
+static int16_t sd_sendCommand(Sd *sd, uint8_t cmd, uint32_t param, uint8_t crc)
 {
+	KFile *fd = sd->ch;
 	/* The 7th bit of command must be a 1 */
 	kfile_putc(cmd | 0x40, fd);
 
@@ -134,14 +130,15 @@ static int16_t sd_sendCommand(uint8_t cmd, uint32_t param, uint8_t crc)
 
 	kfile_putc(crc, fd);
 
-	return sd_waitR1();
+	return sd_waitR1(sd);
 }
 
-
-static bool sd_getBlock(void *buf, size_t len)
+static bool sd_getBlock(Sd *sd, void *buf, size_t len)
 {
 	uint8_t token;
 	uint16_t crc;
+
+	KFile *fd = sd->ch;
 
 	for (int i = 0; i < TIMEOUT_NAC; i++)
 	{
@@ -172,10 +169,10 @@ static bool sd_getBlock(void *buf, size_t len)
 	return false;
 }
 
-#define SD_SELECT() \
+#define SD_SELECT(sd) \
 do \
 { \
-	if (!sd_select(true)) \
+	if (!sd_select((sd), true)) \
 	{ \
 		LOG_ERR("%s failed, card busy\n", __func__); \
 		return EOF; \
@@ -185,37 +182,44 @@ while (0)
 
 #define SD_SETBLOCKLEN 0x50
 
-static int16_t sd_setBlockLen(uint32_t newlen)
+static int16_t sd_setBlockLen(Sd *sd, uint32_t newlen)
 {
-	SD_SELECT();
+	SD_SELECT(sd);
 
-	int16_t r1 = sd_sendCommand(SD_SETBLOCKLEN, newlen, 0);
+	sd->r1 = sd_sendCommand(sd, SD_SETBLOCKLEN, newlen, 0);
 
-	sd_select(false);
-	return r1;
+	sd_select(sd, false);
+	return sd->r1;
 }
 
 #define SD_SEND_CSD 0x49
 
-static int16_t sd_getCSD(CardCSD *csd)
+static int16_t sd_getCSD(Sd *sd, CardCSD *csd)
 {
-	SD_SELECT();
+	SD_SELECT(sd);
 
-	int16_t r1 = sd_sendCommand(SD_SEND_CSD, 0, 0);
+	int16_t r1 = sd_sendCommand(sd, SD_SEND_CSD, 0, 0);
 
 	if (r1)
 	{
-		LOG_ERR("send_csd failed: %04X\n", r1);
-		sd_select(false);
+		LOG_ERR("send_csd failed: %04X\n", sd->r1);
+		sd_select(sd, false);
 		return r1;
 	}
 
 	uint8_t buf[16];
-	bool res = sd_getBlock(buf, sizeof(buf));
-	sd_select(false);
+	bool res = sd_getBlock(sd, buf, sizeof(buf));
+	sd_select(sd, false);
 
 	if (res)
 	{
+		#if LOG_LEVEL >= LOG_LVL_INFO
+			LOG_INFO("CSD: [");
+			for (int i = 0; i < 16; i++)
+				kprintf("%02X ", buf[i]);
+			kprintf("]\n");
+		#endif
+
 		uint16_t mult = (1L << ((((buf[9] & 0x03) << 1) | ((buf[10] & 0x80) >> 7)) + 2));
 		uint16_t c_size = (((uint16_t)(buf[6] & 0x03)) << 10) | (((uint16_t)buf[7]) << 2) |
 				  (((uint16_t)(buf[8] & 0xC0)) >> 6);
@@ -234,44 +238,73 @@ static int16_t sd_getCSD(CardCSD *csd)
 
 #define SD_READ_SINGLEBLOCK 0x51
 
-static int16_t sd_readBlock(void *buf, uint32_t addr)
+static size_t sd_readDirect(struct KBlock *b, block_idx_t idx, void *buf, size_t offset, size_t size)
 {
-	SD_SELECT();
+	Sd *sd = SD_CAST(b);
+	LOG_INFO("reading from block %ld, offset %d, size %d\n", idx, offset, size);
 
-	int16_t r1 = sd_sendCommand(SD_READ_SINGLEBLOCK, addr, 0);
-
-	if (r1)
+	if (sd->tranfer_len != size)
 	{
-		LOG_ERR("read single block failed: %04X\n", r1);
-		sd_select(false);
-		return r1;
+		if ((sd->r1 = sd_setBlockLen(sd, size)))
+		{
+			LOG_ERR("setBlockLen failed: %04X\n", sd->r1);
+			return 0;
+		}
+		sd->tranfer_len = size;
 	}
 
-	bool res = sd_getBlock(buf, SD_DEFAULT_BLOCKLEN);
-	sd_select(false);
+	SD_SELECT(sd);
+
+	sd->r1 = sd_sendCommand(sd, SD_READ_SINGLEBLOCK, idx * SD_DEFAULT_BLOCKLEN + offset, 0);
+
+	if (sd->r1)
+	{
+		LOG_ERR("read single block failed: %04X\n", sd->r1);
+		sd_select(sd, false);
+		return 0;
+	}
+
+	bool res = sd_getBlock(sd, buf, size);
+	sd_select(sd, false);
 	if (!res)
 	{
 		LOG_ERR("read single block failed reading data\n");
-		return EOF;
+		return 0;
 	}
 	else
-		return 0;
+		return size;
 }
 
 #define SD_WRITE_SINGLEBLOCK 0x58
 #define SD_DATA_ACCEPTED     0x05
 
-static int16_t sd_writeBlock(const void *buf, uint32_t addr)
+static size_t sd_writeDirect(KBlock *b, block_idx_t idx, const void *buf, size_t offset, size_t size)
 {
-	SD_SELECT();
+	Sd *sd = SD_CAST(b);
+	KFile *fd = sd->ch;
+	ASSERT(offset == 0);
+	ASSERT(size == SD_DEFAULT_BLOCKLEN);
 
-	int16_t r1 = sd_sendCommand(SD_WRITE_SINGLEBLOCK, addr, 0);
-
-	if (r1)
+	LOG_INFO("writing block %ld\n", idx);
+	if (sd->tranfer_len != SD_DEFAULT_BLOCKLEN)
 	{
-		LOG_ERR("write single block failed: %04X\n", r1);
-		sd_select(false);
-		return r1;
+		if ((sd->r1 = sd_setBlockLen(sd, SD_DEFAULT_BLOCKLEN)))
+		{
+			LOG_ERR("setBlockLen failed: %04X\n", sd->r1);
+			return 0;
+		}
+		sd->tranfer_len = SD_DEFAULT_BLOCKLEN;
+	}
+
+	SD_SELECT(sd);
+
+	sd->r1 = sd_sendCommand(sd, SD_WRITE_SINGLEBLOCK, idx * SD_DEFAULT_BLOCKLEN, 0);
+
+	if (sd->r1)
+	{
+		LOG_ERR("write single block failed: %04X\n", sd->r1);
+		sd_select(sd, false);
+		return 0;
 	}
 
 	kfile_putc(SD_STARTTOKEN, fd);
@@ -279,28 +312,36 @@ static int16_t sd_writeBlock(const void *buf, uint32_t addr)
 	/* send fake crc */
 	kfile_putc(0, fd);
 	kfile_putc(0, fd);
-	uint8_t dataresp = (kfile_getc(fd) & 0x1F);
-	sd_select(false);
 
-	// FIXME: sometimes dataresp is 0, find out why.
-	if (dataresp != SD_DATA_ACCEPTED)
+	uint8_t dataresp = kfile_getc(fd);
+	sd_select(sd, false);
+
+	if ((dataresp & 0x1f) != SD_DATA_ACCEPTED)
 	{
-		LOG_ERR("write single block failed: %02X\n", dataresp);
+		LOG_ERR("write block %ld failed: %02X\n", idx, dataresp);
 		return EOF;
 	}
-	else
-		return 0;
+
+	return SD_DEFAULT_BLOCKLEN;
+}
+
+void sd_writeTest(Sd *sd)
+{
+	uint8_t buf[SD_DEFAULT_BLOCKLEN];
+	memset(buf, 0, sizeof(buf));
+
+	for (block_idx_t i = 0; i < sd->b.blk_cnt; i++)
+	{
+		LOG_INFO("writing block %ld: %s\n", i, (sd_writeDirect(&sd->b, i, buf, 0, SD_DEFAULT_BLOCKLEN) == SD_DEFAULT_BLOCKLEN) ? "OK" : "FAIL");
+	}
 }
 
 
-bool sd_test(void)
+bool sd_test(Sd *sd)
 {
-	CardCSD csd;
-	sd_getCSD(&csd);
-
 	uint8_t buf[SD_DEFAULT_BLOCKLEN];
 
-	if (sd_readBlock(buf, 0) != 0)
+	if (sd_readDirect(&sd->b, 0, buf, 0, sd->b.blk_size) != sd->b.blk_size)
 		return false;
 
 	kputchar('\n');
@@ -312,15 +353,15 @@ bool sd_test(void)
 			kputchar('\n');
 	}
 
-	if (sd_writeBlock(buf, 0) != 0)
+	if (sd_writeDirect(&sd->b, 0, buf, 0, SD_DEFAULT_BLOCKLEN) != SD_DEFAULT_BLOCKLEN)
 		return false;
 
 	memset(buf, 0, sizeof(buf));
-	if (sd_readBlock(buf, 0) != 0)
+	if (sd_readDirect(&sd->b, 0, buf, 0, sd->b.blk_size) != sd->b.blk_size)
 		return false;
 
 	kputchar('\n');
-	for (int i = 0; i < SD_DEFAULT_BLOCKLEN; i++)
+	for (block_idx_t i = 0; i < sd->b.blk_size; i++)
 	{
 		kprintf("%02X ", buf[i]);
 		buf[i] = i;
@@ -331,6 +372,41 @@ bool sd_test(void)
 	return true;
 }
 
+static int sd_error(KBlock *b)
+{
+	Sd *sd = SD_CAST(b);
+	return sd->r1;
+}
+
+static void sd_clearerr(KBlock *b)
+{
+	Sd *sd = SD_CAST(b);
+	sd->r1 = 0;
+}
+
+static const KBlockVTable sd_unbuffered_vt =
+{
+	.readDirect = sd_readDirect,
+	.writeDirect = sd_writeDirect,
+
+	.error = sd_error,
+	.clearerr = sd_clearerr,
+};
+
+static const KBlockVTable sd_buffered_vt =
+{
+	.readDirect = sd_readDirect,
+	.writeDirect = sd_writeDirect,
+
+	.readBuf = kblock_swReadBuf,
+	.writeBuf = kblock_swWriteBuf,
+	.load = kblock_swLoad,
+	.store = kblock_swStore,
+
+	.error = sd_error,
+	.clearerr = sd_clearerr,
+};
+
 #define SD_GO_IDLE_STATE     0x40
 #define SD_GO_IDLE_STATE_CRC 0x95
 #define SD_SEND_OP_COND      0x41
@@ -340,12 +416,13 @@ bool sd_test(void)
 #define SD_INIT_TIMEOUT ms_to_ticks(1000)
 #define SD_IDLE_RETRIES 4
 
-bool sd_init(KFile *_fd)
+static bool sd_blockInit(Sd *sd, KFile *ch)
 {
-	uint16_t r1;
-
-	ASSERT(_fd);
-	fd = _fd;
+	ASSERT(sd);
+	ASSERT(ch);
+	memset(sd, 0, sizeof(*sd));
+	DB(sd->b.priv.type = KBT_SD);
+	sd->ch = ch;
 
 	SD_CS_INIT();
 	SD_CS_OFF();
@@ -355,22 +432,22 @@ bool sd_init(KFile *_fd)
 
 	/* Give 80 clk pulses to wake up the card */
 	for (int i = 0; i < 10; i++)
-		kfile_putc(0xff, fd);
-	kfile_flush(fd);
+		kfile_putc(0xff, ch);
+	kfile_flush(ch);
 
 	for (int i = 0; i < SD_IDLE_RETRIES; i++)
 	{
-		SD_SELECT();
-		r1 = sd_sendCommand(SD_GO_IDLE_STATE, 0, SD_GO_IDLE_STATE_CRC);
-		sd_select(false);
+		SD_SELECT(sd);
+		sd->r1 = sd_sendCommand(sd, SD_GO_IDLE_STATE, 0, SD_GO_IDLE_STATE_CRC);
+		sd_select(sd, false);
 
-		if (r1 == SD_IN_IDLE)
+		if (sd->r1 == SD_IN_IDLE)
 			break;
 	}
 
-	if (r1 != SD_IN_IDLE)
+	if (sd->r1 != SD_IN_IDLE)
 	{
-		LOG_ERR("go_idle_state failed: %04X\n", r1);
+		LOG_ERR("go_idle_state failed: %04X\n", sd->r1);
 		return false;
 	}
 
@@ -379,120 +456,74 @@ bool sd_init(KFile *_fd)
 	/* Wait for card to start */
 	do
 	{
-		SD_SELECT();
-		r1 = sd_sendCommand(SD_SEND_OP_COND, 0, SD_SEND_OP_COND_CRC);
-		sd_select(false);
+		SD_SELECT(sd);
+		sd->r1 = sd_sendCommand(sd, SD_SEND_OP_COND, 0, SD_SEND_OP_COND_CRC);
+		sd_select(sd, false);
 		cpu_relax();
 	}
-	while (r1 != 0 && timer_clock() - start < SD_INIT_TIMEOUT);
+	while (sd->r1 != 0 && timer_clock() - start < SD_INIT_TIMEOUT);
 
-	if (r1)
+	if (sd->r1)
 	{
-		LOG_ERR("send_op_cond failed: %04X\n", r1);
+		LOG_ERR("send_op_cond failed: %04X\n", sd->r1);
 		return false;
 	}
 
-	r1 = sd_setBlockLen(SD_DEFAULT_BLOCKLEN);
+	sd->r1 = sd_setBlockLen(sd, SD_DEFAULT_BLOCKLEN);
+	sd->tranfer_len = SD_DEFAULT_BLOCKLEN;
 
-	if (r1)
+	if (sd->r1)
 	{
-		LOG_ERR("setBlockLen failed: %04X\n", r1);
+		LOG_ERR("setBlockLen failed: %04X\n", sd->r1);
 		return false;
 	}
 
-	sd_status = !r1;
-	return sd_status;
+	/* Avoid warning for uninitialized csd use (gcc bug?) */
+	CardCSD csd = csd;
+
+	sd->r1 = sd_getCSD(sd, &csd);
+
+	if (sd->r1)
+	{
+		LOG_ERR("getCSD failed: %04X\n", sd->r1);
+		return false;
+	}
+
+	sd->b.blk_size = SD_DEFAULT_BLOCKLEN;
+	sd->b.blk_cnt = csd.block_num * (csd.block_len / SD_DEFAULT_BLOCKLEN);
+	LOG_INFO("blk_size %d, blk_cnt %ld\n", sd->b.blk_size, sd->b.blk_cnt);
+
+#if CONFIG_SD_AUTOASSIGN_FAT
+	disk_assignDrive(&sd->b, 0);
+#endif
+
+	return true;
 }
 
-DSTATUS sd_disk_initialize(BYTE drv)
+bool sd_initUnbuf(Sd *sd, KFile *ch)
 {
-	return sd_disk_status(drv);
-}
-
-DSTATUS sd_disk_status(BYTE drv)
-{
-	ASSERT(!drv);
-
-	if (sd_status)
-		return RES_OK;
+	if (sd_blockInit(sd, ch))
+	{
+		sd->b.priv.vt = &sd_unbuffered_vt;
+		return true;
+	}
 	else
-		return STA_NOINIT;
+		return false;
 }
 
-DRESULT sd_disk_read(BYTE drv, BYTE* buf, DWORD sector, BYTE count)
+static uint8_t sd_buf[SD_DEFAULT_BLOCKLEN];
+
+bool sd_initBuf(Sd *sd, KFile *ch)
 {
-	ASSERT(!drv);
-
-	if (!sd_status)
-		return RES_NOTRDY;
-
-	while (count--)
+	if (sd_blockInit(sd, ch))
 	{
-		if (sd_readBlock(buf, sector * SD_DEFAULT_BLOCKLEN))
-			return RES_ERROR;
-		buf += SD_DEFAULT_BLOCKLEN;
-		sector++;
+		sd->b.priv.buf = sd_buf;
+		sd->b.priv.flags |= KB_BUFFERED | KB_PARTIAL_WRITE;
+		sd->b.priv.vt = &sd_buffered_vt;
+		sd->b.priv.vt->load(&sd->b, 0);
+		return true;
 	}
-	return RES_OK;
+	else
+		return false;
 }
 
-DRESULT sd_disk_write(BYTE drv, const BYTE* buf, DWORD sector, BYTE count)
-{
-	ASSERT(!drv);
-
-	if (!sd_status)
-		return RES_NOTRDY;
-
-	while (count--)
-	{
-		if (sd_writeBlock(buf, sector * SD_DEFAULT_BLOCKLEN))
-			return RES_ERROR;
-		buf += SD_DEFAULT_BLOCKLEN;
-		sector++;
-	}
-	return RES_OK;
-}
-
-DRESULT sd_disk_ioctl(BYTE drv, BYTE cmd, void* buf)
-{
-	ASSERT(!drv);
-
-	if (!sd_status)
-		return RES_NOTRDY;
-
-	switch (cmd)
-	{
-		case CTRL_SYNC:
-			return RES_OK;
-
-		case GET_SECTOR_SIZE:
-			*(WORD *)buf = SD_DEFAULT_BLOCKLEN;
-			return RES_OK;
-
-		case GET_SECTOR_COUNT:
-		{
-			CardCSD csd;
-			if (sd_getCSD(&csd))
-				return RES_ERROR;
-			else
-			{
-				*(DWORD *)buf = csd.block_num;
-				return RES_OK;
-			}
-
-		}
-
-		case GET_BLOCK_SIZE:
-			*(DWORD *)buf = 1;
-			return RES_OK;
-
-		default:
-			LOG_ERR("unknown command: [%d]\n", cmd);
-			return RES_PARERR;
-	}
-}
-
-DWORD get_fattime(void)
-{
-	return 0;
-}

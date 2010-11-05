@@ -28,7 +28,6 @@
 #
 # Copyright 2010 Develer S.r.l. (http://www.develer.com/)
 #
-# $Id$
 #
 # Author: Lorenzo Berni <duplo@develer.com>
 #
@@ -44,6 +43,8 @@ from BWizardPage import BWizardPage
 
 from BCreationPage import BCreationPage
 from BToolchainPage import BToolchainPage
+
+from DefineException import ModuleDefineException
 
 from bertos_utils import _cmp
 from toolchain_manager import ToolchainManager
@@ -121,7 +122,10 @@ class BProjectPresets(BWizardPage):
         preset_path = self.selected_path
         try:
             QApplication.instance().setOverrideCursor(Qt.WaitCursor)
-            self.project.loadProjectFromPreset(preset_path)
+            try:
+                self.project.loadProjectFromPreset(preset_path)
+            except ModuleDefineException, e:
+                self.exceptionOccurred(self.tr("Error parsing line '%2' in file %1").arg(e.path).arg(e.line))
             self.setProjectInfo("PRESET_LOADED", True)
         finally:
             QApplication.instance().restoreOverrideCursor()

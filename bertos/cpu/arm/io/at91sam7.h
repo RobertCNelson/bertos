@@ -30,7 +30,6 @@
  *
  * -->
  *
- * \version $Id$
  *
  * \author Francesco Sacchi <batt@develer.com>
  * \author Daniele Basile <asterix@develer.com>
@@ -191,6 +190,7 @@
 #include "at91_spi.h"
 #include "at91_twi.h"
 #include "at91_ssc.h"
+#include "at91_emac.h"
 //TODO: add other peripherals
 
 /**

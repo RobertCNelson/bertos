@@ -29,11 +29,9 @@
  * Copyright 2005 Develer S.r.l. (http://www.develer.com/)
  * -->
  *
- * \version $Id$
  *
  * \brief MCP41xxx digital potentiomenter driver.
  *
- * \version $Id$
  * \author Francesco Sacchi <batt@develer.com>
  *
  * $WIZ$ module_name = "mcp41"
@@ -47,7 +45,7 @@
 #include "hw/mcp41_map.h"
 #include <cfg/compiler.h>
 
-#include <kern/kfile.h>
+#include <io/kfile.h>
 
 #define MCP41_WRITE_DATA 0x11
 #define MCP41_HW_MAX     255

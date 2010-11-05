@@ -171,11 +171,11 @@
 	#define CPU_HARVARD            0
 
 	/// Valid pointers should be >= than this value (used for debug)
-	#if (CPU_CM3_LM3S1968 || CPU_CM3_LM3S8962 || CPU_CM3_STM32F103RB)
+	#if (CPU_CM3_LM3S1968 || CPU_CM3_LM3S8962 || CPU_CM3_STM32F103RB || CPU_CM3_SAM3)
 		#define CPU_RAM_START 0x20000000
 	#else
-		#warning Fix CPU_RAM_START address for your Cortex-M3, default value set to 0x200
-		#define CPU_RAM_START 0x200
+		#warning Fix CPU_RAM_START address for your Cortex-M3, default value set to 0x20000000
+		#define CPU_RAM_START 0x20000000
 	#endif
 
 	#if defined(__ARMEB__)
@@ -239,12 +239,24 @@
 		#define CPU_RAM_START       0x60
 	#elif CPU_AVR_ATMEGA64 || CPU_AVR_ATMEGA128 || CPU_AVR_ATMEGA168 || CPU_AVR_ATMEGA328P
 		#define CPU_RAM_START       0x100
-	#elif CPU_AVR_ATMEGA1281
+	#elif CPU_AVR_ATMEGA1281 || CPU_AVR_ATMEGA1280
 		#define CPU_RAM_START       0x200
 	#else
 		#warning Fix CPU_RAM_START address for your AVR, default value set to 0x100
 		#define CPU_RAM_START       0x100
 	#endif
+
+#elif CPU_MSP430
+
+	#define CPU_REG_BITS            16
+	#define CPU_REGS_CNT            12
+	#define CPU_BYTE_ORDER          CPU_LITTLE_ENDIAN
+	#define CPU_HARVARD		        0
+
+	/// Valid pointers should be >= than this value (used for debug)
+	#define CPU_RAM_START     	    0x200
+
+	#define NOP                     __asm__ __volatile__ ("nop")
 
 #else
 	#error No CPU_... defined.

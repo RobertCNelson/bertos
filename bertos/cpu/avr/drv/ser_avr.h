@@ -30,7 +30,6 @@
  *
  * -->
  *
- * \version $Id$
  *
  * \author Daniele Basile <asterix@develer.com>
  * \author Luca Ottaviano <lottaviano@develer.com>
@@ -87,11 +86,18 @@ typedef uint8_t serstatus_t;
  */
 enum
 {
-#if  CPU_AVR_ATMEGA64 || CPU_AVR_ATMEGA128 || CPU_AVR_ATMEGA1281
+#if  CPU_AVR_ATMEGA1280
+	SER_UART0,
+	SER_UART1,
+	SER_UART2,
+	SER_UART3,
+	SER_SPI,
+#elif  CPU_AVR_ATMEGA64 || CPU_AVR_ATMEGA128 || CPU_AVR_ATMEGA1281
 	SER_UART0,
 	SER_UART1,
 	SER_SPI,
-#elif CPU_AVR_ATMEGA103 || CPU_AVR_ATMEGA8 || CPU_AVR_ATMEGA168 || CPU_AVR_ATMEGA328P
+#elif CPU_AVR_ATMEGA103 || CPU_AVR_ATMEGA8 || CPU_AVR_ATMEGA32 || CPU_AVR_ATMEGA168 \
+		|| CPU_AVR_ATMEGA328P
 	SER_UART0,
 	SER_SPI,
 #else
