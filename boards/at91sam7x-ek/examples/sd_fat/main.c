@@ -210,6 +210,7 @@ typedef struct INISetting
 static SpiDmaAt91 spi_dma;
 static Serial temp_sensor_bus;
 static Serial log_port;
+static Sd sd;
 
 static void init(void)
 {
