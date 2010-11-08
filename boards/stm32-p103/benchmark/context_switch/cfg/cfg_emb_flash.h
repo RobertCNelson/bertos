@@ -27,25 +27,47 @@
  * the GNU General Public License.
  *
  * Copyright 2008 Develer S.r.l. (http://www.develer.com/)
- * All Rights Reserved.
  * -->
  *
- * \brief Configuration file for SPI bitbang module.
- *
- *
  * \author Daniele Basile <asterix@develer.com>
+ *
+ * \brief Configuration file for embedded flash module.
  */
 
-#ifndef CFG_SPI_BITBANG_H
-#define CFG_SPI_BITBANG_H
+#ifndef CFG_EMB_FLASH_H
+#define CFG_EMB_FLASH_H
 
 /**
- * Set data order for emulated SPI.
+ * Module logging level.
  *
  * $WIZ$ type = "enum"
- * $WIZ$ value_list = "ordet_bit_list"
+ * $WIZ$ value_list = "log_level"
  */
-#define CONFIG_SPI_DATAORDER  SPI_LSB_FIRST
+#define CONFIG_FLASH_EMB_LOG_LEVEL      LOG_LVL_INFO
 
-#endif /* CFG_SPI_BITBANG_H */
+/**
+ * module logging format.
+ *
+ * $WIZ$ type = "enum"
+ * $WIZ$ value_list = "log_format"
+ */
+#define CONFIG_FLASH_EMB_LOG_FORMAT     LOG_FMT_TERSE
 
+
+/**
+ * Write emb flash timeout.
+ * For how many milliseconds the cpu wait
+ * to complete write operation.
+ *
+ * $WIZ$ type = "int"
+ */
+#define CONFIG_FLASH_WR_TIMEOUT      100
+
+/**
+ * Check this to disable embedded flash deprecated API support.
+ *
+ * $WIZ$ type = "boolean"
+ */
+#define CONFIG_FLASH_DISABLE_OLD_API       0
+
+#endif /* CFG_FLASH_AT91_H */

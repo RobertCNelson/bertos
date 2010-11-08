@@ -26,30 +26,50 @@
  * invalidate any other reasons why the executable file might be covered by
  * the GNU General Public License.
  *
- * Copyright 2008 Develer S.r.l. (http://www.develer.com/)
- *
+ * Copyright 2009 Develer S.r.l. (http://www.develer.com/)
+ * All Rights Reserved.
  * -->
  *
- * \brief Configuration file for phase module.
+ * \brief Configuration file Secure Digital module.
  *
- * \author Daniele Basile <asterix@develer.com>
+ *
+ * \author Francesco Sacchi <batt@develer.com>
  */
 
-#ifndef CFG_PHASE_H
-#define CFG_PHASE_H
+#ifndef CFG_SD_H
+#define CFG_SD_H
 
 /**
- * Max value of the duty cycle on triac.
- * $WIZ$ type = "int"
- * $WIZ$ min = 1
+ * Module logging level.
+ *
+ * $WIZ$ type = "enum"
+ * $WIZ$ value_list = "log_level"
  */
-#define CONFIG_TRIAC_MAX_DUTY  100
+#define SD_LOG_LEVEL      LOG_LVL_ERR
 
 /**
- * Max value of the triac power.
- * $WIZ$ type = "int"
- * $WIZ$ min = 1
+ * Module logging format.
+ *
+ * $WIZ$ type = "enum"
+ * $WIZ$ value_list = "log_format"
  */
-#define CONFIG_TRIAC_MAX_POWER 100
+#define SD_LOG_FORMAT     LOG_FMT_VERBOSE
 
-#endif /* CFG_PHASE_H */
+
+/**
+ * Enable autoassignment of SD driver to disk drive number 0 of FatFs module.
+ * $WIZ$ type = "boolean"
+ * $WIZ$ conditional_deps = "fat"
+ */
+#define CONFIG_SD_AUTOASSIGN_FAT   1
+
+/**
+ * Enable backward compatibility for sd_init().
+ * If enabled, sd_init() will allocate internally an Sd context,
+ * otherwise sd_init() will need the context to be passed explicitly.
+ *
+ * $WIZ$ type = "boolean"
+ */
+#define CONFIG_SD_OLD_INIT   0
+
+#endif /* CFG_SD_H */

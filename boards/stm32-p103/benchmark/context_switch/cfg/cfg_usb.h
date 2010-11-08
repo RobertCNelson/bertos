@@ -26,18 +26,17 @@
  * invalidate any other reasons why the executable file might be covered by
  * the GNU General Public License.
  *
- * Copyright 2008 Develer S.r.l. (http://www.develer.com/)
+ * Copyright 2010 Develer S.r.l. (http://www.develer.com/)
  *
  * -->
  *
- * \brief Configuration file for BattFS module.
+ * \author Andrea Righi <arighi@develer.com>
  *
- * \author Daniele Basile <asterix@develer.com>
+ * \brief Configuration file for the USB driver module
  */
 
-#ifndef CFG_BATTFS_H
-#define CFG_BATTFS_H
-
+#ifndef CFG_USB_H
+#define CFG_USB_H
 
 /**
  * Module logging level.
@@ -45,7 +44,7 @@
  * $WIZ$ type = "enum"
  * $WIZ$ value_list = "log_level"
  */
-#define BATTFS_LOG_LEVEL      LOG_LVL_INFO
+#define USB_LOG_LEVEL      LOG_LVL_INFO
 
 /**
  * module logging format.
@@ -53,15 +52,13 @@
  * $WIZ$ type = "enum"
  * $WIZ$ value_list = "log_format"
  */
-#define BATTFS_LOG_FORMAT     LOG_FMT_VERBOSE
+#define USB_LOG_FORMAT     LOG_FMT_TERSE
 
 /**
- * Set to 1 to enable free page shuffling.
- * This increase memories life but makes debugging
- * more difficult due to its unrepeteable state.
- * $WIZ$ type = "boolean"
+ * Size of the USB buffer used for endpoint transfers [bytes].
+ * $WIZ$ type = "int"
+ * $WIZ$ min = 2
  */
-#define CONFIG_BATTFS_SHUFFLE_FREE_PAGES 0
+#define CONFIG_USB_BUFSIZE  64
 
-
-#endif /* BATTFS */
+#endif /* CFG_USB_H */
