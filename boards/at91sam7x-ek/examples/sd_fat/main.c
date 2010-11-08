@@ -74,7 +74,7 @@
  *
  *   [log_format]
  *   # Default text to insert on each log line
- *   line_header = BeRTOS Log: 
+ *   line_header = BeRTOS Log:
  *   # Use this char to separate each log field
  *   field_sep = ;
  *
@@ -262,7 +262,7 @@ int main(void)
 		INISetting ini_set;
 		memset(&ini_set, 0, sizeof(ini_set));
 
-		sd_ok = sd_init(&spi_dma.fd);
+		sd_ok = sd_init(&sd, &spi_dma.fd, 0);
 
 		if (sd_ok)
 		{
