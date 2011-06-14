@@ -38,19 +38,23 @@
 #include <cfg/cfg_debug.h>
 #include <cfg/macros.h> /* for BV() */
 
+#include <cpu/types.h>
+
 #include <io/sam3.h>
 
 
-#if CONFIG_KDEBUG_PORT == 0
+#if (CONFIG_KDEBUG_PORT == 0)
 	#define UART_BASE       UART0_BASE
 	#define UART_ID         UART0_ID
-	#define UART_PIO_BASE   PIOA_BASE
-	#define UART_PINS       (BV(RXD0) | BV(TXD0))
-#elif (CONFIG_KDEBUG_PORT == 1) && !defined(CPU_CM3_SAM3U)
+	#define UART_PIO_BASE   UART0_PORT
+	#define UART_PERIPH     UART0_PERIPH
+	#define UART_PINS       (BV(URXD0) | BV(UTXD0))
+#elif (CONFIG_KDEBUG_PORT == 1) && UART_PORTS > 1
 	#define UART_BASE       UART1_BASE
 	#define UART_ID         UART1_ID
-	#define UART_PIO_BASE   PIOB_BASE
-	#define UART_PINS       (BV(RXD1) | BV(TXD1))
+	#define UART_PIO_BASE   UART1_PORT
+	#define UART_PERIPH     UART1_PERIPH
+	#define UART_PINS       (BV(URXD1) | BV(UTXD1))
 #else
 	#error "UART port not supported in this board"
 #endif
@@ -72,13 +76,15 @@ typedef uint32_t kdbg_irqsave_t;
 
 INLINE void kdbg_hw_init(void)
 {
-	/* Disable PIO mode and set appropriate UART pins peripheral mode */
+	/*
+	 * Disable PIO mode and set appropriate UART pins peripheral mode.
+	 * SAM3X,A,N,S,U: all of them has all UARTs on peripheral A.
+	 */
 	HWREG(UART_PIO_BASE + PIO_PDR_OFF) = UART_PINS;
-	HWREG(UART_PIO_BASE + PIO_ABCDSR1_OFF) &= ~UART_PINS;
-	HWREG(UART_PIO_BASE + PIO_ABCDSR2_OFF) &= ~UART_PINS;
+	PIO_PERIPH_SEL(UART_PIO_BASE, UART_PINS, UART_PERIPH);
 
 	/* Enable the peripheral clock */
-	PMC_PCER = BV(UART_ID);
+	pmc_periphEnable(UART_ID);
 
 	/* Reset and disable receiver & transmitter */
 	HWREG(UART_BASE + UART_CR_OFF) = BV(UART_CR_RSTRX) | BV(UART_CR_RSTTX) | BV(UART_CR_RXDIS) | BV(UART_CR_TXDIS);

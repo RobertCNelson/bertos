@@ -26,7 +26,7 @@
  * invalidate any other reasons why the executable file might be covered by
  * the GNU General Public License.
  *
- * Copyright 2010 Develer S.r.l. (http://www.develer.com/)
+ * Copyright 2010,2011 Develer S.r.l. (http://www.develer.com/)
  *
  * -->
  *
@@ -50,7 +50,7 @@
 	#define RTT_ID       3   ///< Real Time Timer (RTT)
 	#define WDT_ID       4   ///< Watchdog Timer (WDT)
 	#define PMC_ID       5   ///< Power Management Controller (PMC)
-	#define EFC_ID       6   ///< Enhanced Flash Controller (EFC)
+	#define EEFC0_ID     6   ///< Enhanced Flash Controller
 	#define UART0_ID     8   ///< UART 0 (UART0)
 	#define UART1_ID     9   ///< UART 1 (UART1)
 	#define PIOA_ID     11   ///< Parallel I/O Controller A (PIOA)
@@ -70,6 +70,52 @@
 	#define ADC_ID      29   ///< Analog To Digital Converter (ADC)
 	#define DACC_ID     30   ///< Digital To Analog Converter (DACC)
 	#define PWM_ID      31   ///< Pulse Width Modulation (PWM)
+#elif CPU_CM3_SAM3X
+	#define SUPC_ID        0   ///< Supply Controller (SUPC)
+	#define RSTC_ID        1   ///< Reset Controller (RSTC)
+	#define RTC_ID         2   ///< Real Time Clock (RTC)
+	#define RTT_ID         3   ///< Real Time Timer (RTT)
+	#define WDT_ID         4   ///< Watchdog Timer (WDT)
+	#define PMC_ID         5   ///< Power Management Controller (PMC)
+	#define EEFC0_ID       6   ///< Enhanced Flash Controller
+	#define EEFC1_ID       7   ///< Enhanced Flash Controller
+	#define UART0_ID       8   ///< UART 0 (UART0)
+	#define SMC_SDRAMC_ID  9   ///< Satic memory controller / SDRAM controller
+	#define SDRAMC_ID     10   ///< Satic memory controller / SDRAM controller
+	#define PIOA_ID       11   ///< Parallel I/O Controller A
+	#define PIOB_ID       12   ///< Parallel I/O Controller B
+	#define PIOC_ID       13   ///< Parallel I/O Controller C
+	#define PIOD_ID       14   ///< Parallel I/O Controller D
+	#define PIOE_ID       15   ///< Parallel I/O Controller E
+	#define PIOF_ID       16   ///< Parallel I/O Controller F
+	#define US0_ID        17   ///< USART 0
+	#define US1_ID        18   ///< USART 1
+	#define US2_ID        19   ///< USART 2
+	#define US3_ID        20   ///< USART 3
+	#define HSMCI_ID      21   ///< High speed multimedia card interface
+	#define TWI0_ID       22   ///< Two Wire Interface 0
+	#define TWI1_ID       23   ///< Two Wire Interface 1
+	#define SPI0_ID       24   ///< Serial Peripheral Interface
+	#define SPI1_ID       25   ///< Serial Peripheral Interface
+	#define SSC_ID        26   ///< Synchronous serial controller
+	#define TC0_ID        27   ///< Timer/Counter 0
+	#define TC1_ID        28   ///< Timer/Counter 1
+	#define TC2_ID        29   ///< Timer/Counter 2
+	#define TC3_ID        30   ///< Timer/Counter 3
+	#define TC4_ID        31   ///< Timer/Counter 4
+	#define TC5_ID        32   ///< Timer/Counter 5
+	#define TC6_ID        33   ///< Timer/Counter 6
+	#define TC7_ID        34   ///< Timer/Counter 7
+	#define TC8_ID        35   ///< Timer/Counter 8
+	#define PWM_ID        36   ///< Pulse width modulation controller
+	#define ADC_ID        37   ///< ADC controller
+	#define DACC_ID       38   ///< DAC controller
+	#define DMAC_ID       39   ///< DMA controller
+	#define UOTGHS_ID     40   ///< USB OTG high speed
+	#define TRNG_ID       41   ///< True random number generator
+	#define EMAC_ID       42   ///< Ethernet MAC
+    #define CAN0_ID       43   ///< CAN controller 0
+    #define CAN1_ID       44   ///< CAN controller 1
 #else
 	#error Peripheral IDs undefined
 #endif
@@ -81,26 +127,21 @@
 #define USART_HAS_PDC  1
 #define SPI_HAS_PDC    1
 
-/* PDC registers */
-#define PERIPH_RPR_OFF  0x100  // Receive Pointer Register.
-#define PERIPH_RCR_OFF  0x104  // Receive Counter Register.
-#define PERIPH_TPR_OFF  0x108  // Transmit Pointer Register.
-#define PERIPH_TCR_OFF  0x10C  // Transmit Counter Register.
-#define PERIPH_RNPR_OFF 0x110  // Receive Next Pointer Register.
-#define PERIPH_RNCR_OFF 0x114  // Receive Next Counter Register.
-#define PERIPH_TNPR_OFF 0x118  // Transmit Next Pointer Register.
-#define PERIPH_TNCR_OFF 0x11C  // Transmit Next Counter Register.
-#define PERIPH_PTCR_OFF 0x120  // PDC Transfer Control Register.
-#define PERIPH_PTSR_OFF 0x124  // PDC Transfer Status Register.
-
-#define PDC_RXTEN  0
-#define PDC_RXTDIS 1
-#define PDC_TXTEN  8
-#define PDC_TXTDIS 9
-
+#if CPU_CM3_SAM3X || CPU_CM3_SAM3U
+	#define USART_PORTS    1
+	#define UART_PORTS     4
+#elif CPU_CM3_SAM3N || CPU_CM3_SAM3S
+	#define USART_PORTS    2
+	#define UART_PORTS     2
+#else
+	#error undefined U(S)ART_PORTS for this cpu
+#endif
 
 #include "sam3_sysctl.h"
+#include "sam3_pdc.h"
 #include "sam3_pmc.h"
+#include "sam3_smc.h"
+#include "sam3_sdramc.h"
 #include "sam3_ints.h"
 #include "sam3_pio.h"
 #include "sam3_nvic.h"
@@ -109,34 +150,191 @@
 #include "sam3_spi.h"
 #include "sam3_flash.h"
 #include "sam3_wdt.h"
+#include "sam3_emac.h"
+#include "sam3_rstc.h"
+#include "sam3_adc.h"
+#include "sam3_dacc.h"
+#include "sam3_tc.h"
+#include "sam3_twi.h"
+#include "sam3_ssc.h"
 
 /**
- * UART I/O pins
+ * U(S)ART I/O pins
  */
 /*\{*/
 #if CPU_CM3_SAM3U
-	#define RXD0   11
-	#define TXD0   12
-#else
-	#define RXD0    9
-	#define TXD0   10
-	#define RXD1    2
-	#define TXD1    3
+	#define UART0_PORT   PIOA_BASE
+	#define USART0_PORT  PIOA_BASE
+	#define USART1_PORT  PIOA_BASE
+	#define USART2_PORT  PIOA_BASE
+	#define USART3_PORT  PIOC_BASE
+
+	#define UART0_PERIPH   PIO_PERIPH_A
+	#define USART0_PERIPH  PIO_PERIPH_A
+	#define USART1_PERIPH  PIO_PERIPH_A
+	#define USART2_PERIPH  PIO_PERIPH_A
+	#define USART3_PERIPH  PIO_PERIPH_B
+
+	#define URXD0   11
+	#define UTXD0   12
+	#define RXD0    19
+	#define TXD0    18
+	#define RXD1    21
+	#define TXD1    20
+	#define RXD2    23
+	#define TXD2    22
+	#define RXD3    13
+	#define TXD3    12
+#elif CPU_CM3_SAM3X
+	#define UART0_PORT   PIOA_BASE
+	#define USART0_PORT  PIOA_BASE
+	#define USART1_PORT  PIOA_BASE
+	#define USART2_PORT  PIOB_BASE
+	#define USART3_PORT  PIOD_BASE
+
+	#define UART0_PERIPH   PIO_PERIPH_A
+	#define USART0_PERIPH  PIO_PERIPH_A
+	#define USART1_PERIPH  PIO_PERIPH_A
+	#define USART2_PERIPH  PIO_PERIPH_A
+	#define USART3_PERIPH  PIO_PERIPH_B
+
+	#define URXD0    8
+	#define UTXD0    9
+	#define RXD0    10
+	#define TXD0    11
+	#define RXD1    12
+	#define TXD1    13
+	#define RXD2    21
+	#define TXD2    20
+	#define RXD3     5
+	#define TXD3     4
+#elif CPU_CM3_SAM3N || CPU_CM3_SAM3S
+	#define UART0_PORT   PIOA_BASE
+	#define UART1_PORT   PIOB_BASE
+	#define USART0_PORT  PIOA_BASE
+	#define USART1_PORT  PIOA_BASE
+
+	#define UART0_PERIPH   PIO_PERIPH_A
+	#define UART1_PERIPH   PIO_PERIPH_A
+	#define USART0_PERIPH  PIO_PERIPH_A
+	#define USART1_PERIPH  PIO_PERIPH_A
+
+	#define URXD0    9
+	#define UTXD0   10
+	#define URXD1    2
+	#define UTXD1    3
+	#define RXD0     5
+	#define TXD0     6
+	#define RXD1    21
+	#define TXD1    22
 #endif
 /*\}*/
 
 /**
- * PIO I/O pins
+ * SPI I/O pins
  */
 /*\{*/
 #if CPU_CM3_SAM3U
 	#define SPI0_SPCK   15
 	#define SPI0_MOSI   14
 	#define SPI0_MISO   13
+#elif CPU_CM3_SAM3X
+	#define SPI0_SPCK   27
+	#define SPI0_MOSI   26
+	#define SPI0_MISO   25
 #else
 	#define SPI0_SPCK   14
 	#define SPI0_MOSI   13
 	#define SPI0_MISO   12
 #endif
+/*\}*/
+
+/**
+ * TWI I/O pins
+ */
+/*\{*/
+#if CPU_CM3_SAM3X
+	#define TWI0_PORT   PIOA_BASE
+	#define TWI1_PORT   PIOA_BASE
+
+	#define TWI0_PERIPH  PIO_PERIPH_A
+	#define TWI1_PERIPH  PIO_PERIPH_A
+
+	#define TWI0_TWD    17
+	#define TWI0_TWCK   18
+	#define TWI1_TWD    12
+	#define TWI1_TWCK   13
+#elif CPU_CM3_SAM3N || CPU_CM3_SAM3S
+	#define TWI0_PORT   PIOA_BASE
+	#define TWI1_PORT   PIOB_BASE
+
+	#define TWI0_PERIPH  PIO_PERIPH_A
+	#define TWI1_PERIPH  PIO_PERIPH_A
+
+	#define TWI0_TWD    3
+	#define TWI0_TWCK   4
+	#define TWI1_TWD    4
+	#define TWI1_TWCK   5
+#elif CPU_CM3_SAM3U
+	#define TWI0_PORT   PIOA_BASE
+	#define TWI1_PORT   PIOA_BASE
+
+	#define TWI0_PERIPH  PIO_PERIPH_A
+	#define TWI1_PERIPH  PIO_PERIPH_A
+
+	#define TWI0_TWD    9
+	#define TWI0_TWCK   10
+	#define TWI1_TWD    24
+	#define TWI1_TWCK   25
+#endif
+
+#if CPU_CM3_SAM3X
+	#define SSC_PORT            PIOA_BASE
+	#define SSC_PIO_PDR         PIOA_PDR
+	#define SSC_RECV_PERIPH     PIO_PERIPH_A
+	#define SSC_TRAN_PERIPH     PIO_PERIPH_B
+	#define SSC_RD              18
+	#define SSC_RF              17
+	#define SSC_RK              19
+	#define SSC_TD              16
+	#define SSC_TF              15
+	#define SSC_TK              14
+#elif CPU_CM3_SAM3N
+	#define SSC_PORT            /* None! */
+	#define SSC_PIO_PDR         /* None! */
+	#define SSC_RECV_PERIPH     /* None! */
+	#define SSC_TRAN_PERIPH     /* None! */
+	#define SSC_RD              /* None! */
+	#define SSC_RF              /* None! */
+	#define SSC_RK              /* None! */
+	#define SSC_TD              /* None! */
+	#define SSC_TF              /* None! */
+	#define SSC_TK              /* None! */
+#elif CPU_CM3_SAM3S
+	#define SSC_PORT            PIOA_BASE
+	#define SSC_PIO_PDR         PIOA_PDR
+	#define SSC_RECV_PERIPH     PIO_PERIPH_A
+	#define SSC_TRAN_PERIPH     PIO_PERIPH_A
+	#define SSC_RD              18
+	#define SSC_RF              20
+	#define SSC_RK              19
+	#define SSC_TD              17
+	#define SSC_TF              15
+	#define SSC_TK              16
+#elif CPU_CM3_SAM3U
+	#define SSC_PORT            PIOA_BASE
+	#define SSC_PIO_PDR         PIOA_PDR
+	#define SSC_RECV_PERIPH     PIO_PERIPH_A
+	#define SSC_TRAN_PERIPH     PIO_PERIPH_A
+	#define SSC_RD              27
+	#define SSC_RF              31
+	#define SSC_RK              29
+	#define SSC_TD              26
+	#define SSC_TF              30
+	#define SSC_TK              28
+#else
+	#error no ssc pins are defined for this cpu
+#endif
+
 /*\}*/
 #endif /* SAM3_H */

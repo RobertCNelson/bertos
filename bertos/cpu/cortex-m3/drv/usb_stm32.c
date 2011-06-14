@@ -117,7 +117,7 @@ static const UsbEndpointDesc USB_CtrlEpDescr1 =
 static UsbCtrlRequest setup_packet;
 
 /* USB device controller: max supported interfaces */
-#define USB_MAX_INTERFACE	1
+#define USB_MAX_INTERFACE	CONFIG_USB_INTERFACE_MAX
 
 /* USB device controller features */
 #define STM32_UDC_FEATURE_SELFPOWERED	BV(0)
@@ -148,17 +148,17 @@ static stm32_UsbMemSlot *mem_use;
 static stm32_UsbMemSlot memory_buffer[EP_MAX_NUM];
 
 /* Endpoint TX and RX buffers */
-/// \cond
-/* XXX: use the empty cond section to silent a buggy doxygen warning */
 static size_t rx_size, tx_size;
 
 #define EP_BUFFER_SIZE _MIN(CONFIG_USB_BUFSIZE, USB_XFER_MAX_SIZE)
 STATIC_ASSERT(!(EP_BUFFER_SIZE & 0x03));
 
 static uint8_t ep_buffer[EP_MAX_NUM][EP_BUFFER_SIZE] ALIGNED(4);
-/// \endcond
 
 static Event usb_event_done[EP_MAX_SLOTS];
+
+/* Check if we're running in atomic (non-sleepable) context or not */
+static volatile bool in_atomic = false;
 
 /* Allocate a free block of the packet memory */
 static stm32_UsbMemSlot *usb_malloc(void)
@@ -814,22 +814,27 @@ static int usb_ep_configure(const UsbEndpointDesc *epd, bool enable)
 		switch (ep_hw->type)
 		{
 		case USB_ENDPOINT_XFER_CONTROL:
-			LOG_INFO("EP%d: CONTROL IN\n", EP >> 1);
+			LOG_INFO("EP%d: CONTROL %s\n", EP >> 1,
+					EP & 1 ? "IN" : "OUT");
 			ep_ctrl_set_ep_type(hw, EP_CTRL);
 			ep_ctrl_set_ep_kind(hw, 0);
 			break;
 		case USB_ENDPOINT_XFER_INT:
-			LOG_INFO("EP%d: INTERRUPT IN\n", EP >> 1);
+			LOG_INFO("EP%d: INTERRUPT %s\n", EP >> 1,
+					EP & 1 ? "IN" : "OUT");
 			ep_ctrl_set_ep_type(hw, EP_INTERRUPT);
 			ep_ctrl_set_ep_kind(hw, 0);
 			break;
 		case USB_ENDPOINT_XFER_BULK:
-			LOG_INFO("EP%d: BULK IN\n", EP >> 1);
+			LOG_INFO("EP%d: BULK %s\n", EP >> 1,
+					EP & 1 ? "IN" : "OUT");
 			ep_ctrl_set_ep_type(hw, EP_BULK);
 			ep_ctrl_set_ep_kind(hw, 0);
 			break;
 		case USB_ENDPOINT_XFER_ISOC:
-			LOG_ERR("EP%d: ISOCHRONOUS IN: not supported\n", EP >> 1);
+			LOG_ERR("EP%d: ISOCHRONOUS %s: not supported\n",
+					EP >> 1,
+					EP & 1 ? "IN" : "OUT");
 			/* Fallback to default */
 		default:
 			ASSERT(0);
@@ -1118,13 +1123,14 @@ static void usb_endpointRead_complete(int ep)
 	rx_size = ep_cnfg[ep].size;
 }
 
-ssize_t usb_endpointRead(int ep, void *buffer, ssize_t size)
+ssize_t usb_endpointReadTimeout(int ep, void *buffer, ssize_t size,
+				ticks_t timeout)
 {
 	int ep_num = usb_ep_logical_to_hw(ep);
 	ssize_t max_size = sizeof(ep_buffer[ep_num]);
 
 	/* Non-blocking read for EP0 */
-	if (ep_num == CTRL_ENP_OUT)
+	if (in_atomic && (ep_num == CTRL_ENP_OUT))
 	{
 		size = usb_size(size, usb_le16_to_cpu(setup_packet.wLength));
 		if (UNLIKELY(size > max_size))
@@ -1153,7 +1159,11 @@ ssize_t usb_endpointRead(int ep, void *buffer, ssize_t size)
 	/* Blocking read */
 	__usb_ep_read(ep_num, ep_buffer[ep_num], size,
 				usb_endpointRead_complete);
-	event_wait(&usb_event_done[ep_num >> 1]);
+	if (timeout < 0)
+		event_wait(&usb_event_done[ep_num >> 1]);
+	else
+		if (!event_waitTimeout(&usb_event_done[ep_num >> 1], timeout))
+			return 0;
 	memcpy(buffer, ep_buffer[ep_num], rx_size);
 
 	return rx_size;
@@ -1172,13 +1182,14 @@ static void usb_endpointWrite_complete(int ep)
 	tx_size = ep_cnfg[ep].size;
 }
 
-ssize_t usb_endpointWrite(int ep, const void *buffer, ssize_t size)
+ssize_t usb_endpointWriteTimeout(int ep, const void *buffer, ssize_t size,
+				ticks_t timeout)
 {
 	int ep_num = usb_ep_logical_to_hw(ep);
 	ssize_t max_size = sizeof(ep_buffer[ep_num]);
 
 	/* Non-blocking write for EP0 */
-	if (ep_num == CTRL_ENP_IN)
+	if (in_atomic && (ep_num == CTRL_ENP_IN))
 	{
 		size = usb_size(size, usb_le16_to_cpu(setup_packet.wLength));
 		if (UNLIKELY(size > max_size))
@@ -1208,7 +1219,11 @@ ssize_t usb_endpointWrite(int ep, const void *buffer, ssize_t size)
 	memcpy(ep_buffer[ep_num], buffer, size);
 	__usb_ep_write(ep_num, ep_buffer[ep_num], size,
 				usb_endpointWrite_complete);
-	event_wait(&usb_event_done[ep_num >> 1]);
+	if (timeout < 0)
+		event_wait(&usb_event_done[ep_num >> 1]);
+	else
+		if (!event_waitTimeout(&usb_event_done[ep_num >> 1], timeout))
+			return 0;
 
 	return tx_size;
 }
@@ -1490,11 +1505,8 @@ static void usb_get_descriptor_handler(void)
 	if ((setup_packet.mRequestType & USB_RECIP_MASK) ==
 			USB_RECIP_DEVICE)
 		usb_get_descriptor();
-	/* Getting descriptor for a device is a standard request */
-	else if ((setup_packet.mRequestType & USB_DIR_MASK) == USB_DIR_IN)
-		usb_event_handler(usb_dev);
 	else
-		ep_cnfg[CTRL_ENP_OUT].status = STALLED;
+		usb_event_handler(usb_dev);
 }
 
 /* USB setup packet: SET_ADDRESS handler */
@@ -1804,6 +1816,9 @@ static void usb_isr(void)
 	interrupt.status = usb->ISTR;
 	interrupt.status &= usb->CNTR | 0x1f;
 
+	/* Set the context as atomic */
+	in_atomic = true;
+
 	if (interrupt.PMAOVR)
 	{
 		LOG_WARN("%s: DMA overrun / underrun\n", __func__);
@@ -1853,6 +1868,7 @@ static void usb_isr(void)
 	{
 		usb_isr_correct_transfer(interrupt);
 	}
+	in_atomic = false;
 }
 
 /* USB: hardware initialization */

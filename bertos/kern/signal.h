@@ -31,6 +31,10 @@
  *
  * -->
  *
+ * \defgroup kern_signal Kernel signals
+ * \ingroup kern
+ * \{
+ *
  * \brief Signal module for IPC.
  *
  *
@@ -47,23 +51,119 @@
 #include <cfg/compiler.h>
 #include <cfg/macros.h>    // BV()
 
-/* Fwd decl */
-struct Process;
+#include <cpu/irq.h>
 
-/* Inter-process Communication services */
-sigmask_t sig_check(sigmask_t sigs);
-void sig_send(struct Process *proc, sigmask_t sig);
-void sig_post(struct Process *proc, sigmask_t sig);
+#include <kern/proc.h>
+
+#if CONFIG_KERN_SIGNALS
+
+INLINE sigmask_t __sig_checkSignal(Signal *s, sigmask_t sigs)
+{
+	sigmask_t result;
+
+	result = s->recv & sigs;
+	s->recv &= ~sigs;
+
+	return result;
+}
+
+/**
+ * Check if any of the signals in \a sigs has occurred and clear them.
+ *
+ * \return the signals that have occurred.
+ */
+INLINE sigmask_t sig_checkSignal(Signal *s, sigmask_t sigs)
+{
+	cpu_flags_t flags;
+	sigmask_t result;
+
+	IRQ_SAVE_DISABLE(flags);
+	result = __sig_checkSignal(s, sigs);
+	IRQ_RESTORE(flags);
+
+	return result;
+}
+
+/**
+ * Check if any of the signals in \a sigs has occurred and clear them.
+ *
+ * \return the signals that have occurred.
+ */
+INLINE sigmask_t sig_check(sigmask_t sigs)
+{
+	Process *proc = proc_current();
+	return sig_checkSignal(&proc->sig, sigs);
+}
+
+void sig_sendSignal(Signal *s, Process *proc, sigmask_t sig);
+
+/**
+ * Send the signals \a sigs to the process \a proc and immeditaly dispatch it
+ * for execution.
+ *
+ * The process will be awoken if it was waiting for any of them and immediately
+ * dispatched for execution.
+ *
+ * \note This function can't be called from IRQ context, use sig_post()
+ * instead.
+ */
+INLINE void sig_send(Process *proc, sigmask_t sig)
+{
+	sig_sendSignal(&proc->sig, proc, sig);
+}
+
+void sig_postSignal(Signal *s, Process *proc, sigmask_t sig);
+
+/**
+ * Send the signals \a sigs to the process \a proc.
+ * The process will be awoken if it was waiting for any of them.
+ *
+ * \note This call is interrupt safe.
+ */
+INLINE void sig_post(Process *proc, sigmask_t sig)
+{
+	sig_postSignal(&proc->sig, proc, sig);
+}
+
 /*
  * XXX: this is provided for backword compatibility, consider to make this
  * deprecated for the future.
  */
-INLINE void sig_signal(struct Process *proc, sigmask_t sig)
+INLINE void sig_signal(Process *proc, sigmask_t sig)
 {
-	sig_post(proc, sig);
+	sig_postSignal(&proc->sig, proc, sig);
 }
-sigmask_t sig_wait(sigmask_t sigs);
-sigmask_t sig_waitTimeout(sigmask_t sigs, ticks_t timeout);
+
+sigmask_t sig_waitSignal(Signal *s, sigmask_t sigs);
+
+/**
+ * Sleep until any of the signals in \a sigs occurs.
+ *
+ * \return the signal(s) that have awoken the process.
+ */
+INLINE sigmask_t sig_wait(sigmask_t sigs)
+{
+	Process *proc = proc_current();
+	return sig_waitSignal(&proc->sig, sigs);
+}
+
+sigmask_t sig_waitTimeoutSignal(Signal *s, sigmask_t sigs, ticks_t timeout,
+				Hook func, iptr_t data);
+
+/**
+ * Sleep until any of the signals in \a sigs or \a timeout ticks elapse.
+ * If the timeout elapse a SIG_TIMEOUT is added to the received signal(s).
+ * \return the signal(s) that have awoken the process.
+ * \note Caller must check return value to check which signal awoke the process.
+ */
+INLINE sigmask_t sig_waitTimeout(sigmask_t sigs, ticks_t timeout)
+{
+	Process *proc = proc_current();
+	return sig_waitTimeoutSignal(&proc->sig, sigs, timeout,
+			NULL, NULL);
+}
+
+#endif /* CONFIG_KERN_SIGNALS */
 
 int signal_testRun(void);
 int signal_testSetup(void);
@@ -77,10 +177,17 @@ int signal_testTearDown(void);
 #define SIG_USER1    BV(1)  /**< Free for user usage */
 #define SIG_USER2    BV(2)  /**< Free for user usage */
 #define SIG_USER3    BV(3)  /**< Free for user usage */
-#define SIG_TIMEOUT  BV(4)  /**< Reserved for timeout use */
-#define SIG_SYSTEM5  BV(5)  /**< Reserved for system use */
-#define SIG_SYSTEM6  BV(6)  /**< Reserved for system use */
-#define SIG_SINGLE   BV(7)  /**< Used to wait for a single event */
+#define SIG_SINGLE   BV(4)  /**< Used to wait for a single event */
+#define SIG_SYSTEM5  BV(5)  /**< Reserved for internal system use */
+#define SIG_SYSTEM6  BV(6)  /**< Reserved for internal system use */
+#define SIG_TIMEOUT  BV(7)  /**< Reserved for timeout use */
+
+/**
+ * Max number of signals that can be used by drivers or user applications.
+ */
+#define SIG_USER_MAX SIG_SINGLE
 /*\}*/
+
+/* \} */ //defgroup kern_signal
 
 #endif /* KERN_SIGNAL_H */

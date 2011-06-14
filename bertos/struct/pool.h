@@ -26,12 +26,54 @@
  * invalidate any other reasons why the executable file might be covered by
  * the GNU General Public License.
  *
- * Copyright 2004, 2008 Develer S.r.l. (http://www.develer.com/)
+ * Copyright 2004, 2008, 2011 Develer S.r.l. (http://www.develer.com/)
  * -->
+ *
+ * \defgroup pool Pool memory allocator
+ * \ingroup struct
+ * \{
  *
  * \brief Pool macros.
  *
+ * The pool module provides the boilerplate code to create a set of objects
+ * of the same type.
+ * It provides an interface similar to the heap module, with pool_alloc() and
+ * pool_free() functions that allocate and free an element respectively.
+ * In contrast with the heap module, you can specify exactly the number of
+ * items that you want to be in the pool.
+ *
+ * Items in the pool must be a derived class of <tt>Node *</tt>, which also
+ * means that they can be used as-is with list containers, eg. MsgPort.
+ *
+ * Example code:
+ * \code
+ * typedef struct MyType
+ * {
+ *     Node *n;
+ *     uint16_t *buf;
+ *     // other members here...
+ * } MyType;
+ *
+ * DECLARE_POOL(mypool, MyType, POOL_SIZE);
+ *
+ * static void elem_init(MyType *e)
+ * {
+ *     e->buf = NULL;
+ *     // other initializations here
+ * }
+ *
+ * int main(void)
+ * {
+ *     pool_init(&mypool, elem_init);
+ *
+ *     MyType *foo = pool_alloc(&mypool);
+ *     // do stuff with foo
+ *     pool_free(&mypool, foo);
+ * }
+ * \endcode
+ *
  * \author Giovanni Bajo <rasky@develer.com>
+ * \author Luca Ottaviano <lottaviano@develer.com>
  */
 
 #ifndef STRUCT_POOL_H
@@ -40,6 +82,9 @@
 #include <cfg/macros.h>
 #include <struct/list.h>
 
+/**
+ * \brief Extern pool declaration
+ */
 #define EXTERN_POOL(name) \
 	extern List name
 
@@ -48,7 +93,7 @@
 	storage name; \
 	INLINE void name##_init(void (*init_func)(type*)) \
 	{ \
-		int i; \
+		size_t i; \
 		LIST_INIT(&name); \
 		for (i=0;i<countof(name##_items);++i) \
 		{ \
@@ -59,15 +104,74 @@
 	INLINE void name##_init(void (*init_func)(type*)) \
 	/**/
 
+/**
+ * \brief Helper macro to declare a Pool data type.
+ *
+ * Data type inserted into the pool must be a <tt>Node *</tt>
+ * type.
+ *
+ * \param name Variable name of the pool.
+ * \param type Data type held by the pool.
+ * \param num Number of elements in pool.
+ */
 #define DECLARE_POOL(name, type, num) \
 	DECLARE_POOL_WITH_STORAGE(name, type, num, List)
 
+/**
+ * \brief Static Pool declaration
+ *
+ * \sa DECLARE_POOL
+ */
 #define DECLARE_POOL_STATIC(name, type, num) \
 	DECLARE_POOL_WITH_STORAGE(name, type, num, static List)
 
+/**
+ * Initialize the pool \a name, calling \a init_func on each element.
+ *
+ * The init function must have the following prototype:
+ * \code
+ * void init_func(type *)
+ * \endcode
+ * where \a type is the type of objects held in the pool.
+ *
+ * \param name Pool to initialize
+ * \param init_func Init function to be called on each element
+ */
 #define pool_init(name, init_func)     (*(name##_init))(init_func)
-#define pool_alloc(name)               REMHEAD(name)
+
+/**
+ * \brief Allocate an element from the pool.
+ *
+ * The returned element is of type <tt>Node *</tt>, it's safe to
+ * cast it to the type contained in the pool.
+ *
+ * \note If the element was recycled with pool_free(), it will not be reset,
+ * so don't assume that the element has specific values.
+ *
+ * \param name Pointer to pool to alloc from.
+ * \return Element of the type present in the pool.
+ */
+#define pool_alloc(name)               list_remHead(name)
+
+/**
+ * \brief Recycle an element into the pool
+ *
+ * \note Element fields are not reset to its original values, keep that in
+ * mind when you alloc nodes.
+ *
+ * \param name Pointer to pool where the node should be recycled.
+ * \param elem Element to be recycled.
+ */
 #define pool_free(name, elem)          ADDHEAD(name, (Node*)elem)
-#define pool_empty(name)               ISLISTEMPTY(name)
+
+/**
+ * \brief Test if the pool is empty
+ *
+ * \param name Pointer to pool.
+ * \return True if the pool is empty, false otherwise.
+ */
+#define pool_empty(name)               LIST_EMPTY(name)
+
+ /** \} */ /* defgroup pool */
 
 #endif /* STRUCT_POOL_H */

@@ -42,6 +42,7 @@
 #ifndef USB_ENDPOINT_H
 #define USB_ENDPOINT_H
 
+#include "cfg/cfg_usb.h"
 #include "cfg/cfg_usbser.h"
 #include "cfg/cfg_usbkbd.h"
 #include "cfg/cfg_usbmouse.h"
@@ -60,7 +61,19 @@ enum {
 #if (defined(CONFIG_USBMOUSE) && CONFIG_USBMOUSE)
 	USB_MOUSE_EP_REPORT,
 #endif
-	USB_EP_MAX, /* Number of allocated endpoints */
+ /* Number of allocated endpoints */
+#if (CONFIG_USB_EP_MAX == 0)
+	USB_EP_MAX,
+#else
+	USB_EP_MAX = CONFIG_USB_EP_MAX,
+#endif
 };
+
+/*
+ * NOTE: a USB inteface requires at least one endpoint. Moreover, there's the
+ * special endpoint 0. In conclusion, the number of endpoints must be always
+ * greater than the number of interfaces.
+ */
+STATIC_ASSERT(USB_EP_MAX >= CONFIG_USB_INTERFACE_MAX);
 
 #endif /* USB_ENDPOINT_H */

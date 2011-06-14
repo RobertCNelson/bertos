@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 #
-# This file is part of slimqc.
+# This file is part of BeRTOS.
 #
 # Bertos is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -137,18 +137,27 @@ s["BERTOS_PATH"] = bertos_path
 s["PROJECT_HW_PATH"] = hw_path
 s["PROJECT_SRC_PATH"] = "."
 s["PRESET"] = True
+
+# Calculate relative paths useful to discover where are the sources (and the hw
+# files) relatively to the BeRTOS Makefile
+bertos_path = os.path.abspath(preset_dir + "/" + bertos_path)
+hw_path = os.path.abspath(preset_dir + "/" + hw_path)
+
+src_path = os.path.relpath(preset_dir, bertos_path)
+hw_path  = os.path.relpath(hw_path, bertos_path)
+
+# Src path and hw path relatively to the BeRTOS Makefile.
+s["PROJECT_SRC_PATH_FROM_MAKEFILE"] = src_path
+s["PROJECT_HW_PATH_FROM_MAKEFILE"] = hw_path
+toolchain = s["TOOLCHAIN"]["path"]
+s["TOOLCHAIN"]["path"] = os.path.basename(toolchain)
+
 pprint.pprint(s)
 p = open(preset_dir + "/project.bertos", "w")
 pickle.dump(s, p)
 
 #Create a .spec file in order to make this preset visible in the Wizard
 open(preset_dir + "/.spec", "w").write("name = '%s preset'" % pname)
-
-bertos_path = os.path.abspath(preset_dir + "/" + bertos_path)
-hw_path = os.path.abspath(preset_dir + "/" + hw_path)
-
-src_path = os.path.relpath(preset_dir, bertos_path)
-hw_path  = os.path.relpath(hw_path, bertos_path)
 
 #Update project makefiles adapting them to the new directory layout
 mk = open(preset_dir + "/" + pname + ".mk").read()

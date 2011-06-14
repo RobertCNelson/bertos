@@ -42,6 +42,8 @@
 	#include "i2c_lm3s.h"
 #elif CPU_CM3_STM32
 	#include "i2c_stm32.h"
+#elif CPU_CM3_SAM3
+	#include "i2c_sam3.h"
 /*#elif  Add other Cortex-M3 CPUs here */
 #else
 	#error Unknown CPU

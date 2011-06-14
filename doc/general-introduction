@@ -1,0 +1,174 @@
+/*!
+<!--
+This document is automatically processed by Doxygen (http://www.doxygen.org/).
+Don't remove special formatting tags.
+This section won't be processed unless enabled.
+
+See STATUS for further information and tips about Doxygen tags.
+-->
+\page oop Object Oriented Programming
+
+BeRTOS uses object oriented programming concepts for the base interfaces.
+If used in the right way, OOP elegantly solves a broad range of problems
+linked with the creation of common and reusable interfaces that allow
+you to save development time and precious memory space.
+Have a look at <a href="http://www.bertos.org/use/tutorial-front-page/drivers-kfile-interface/">
+KFile tutorial</a> on BeRTOS web site for
+a more complete introduction to object oriented programming.
+
+<h2>OOP in C</h2>
+Object oriented programming in C requires a context struct and a few interface
+functions that operate on that context.
+The base class is implemented with a struct with a few function pointers
+that point to the implementation specific for the context.
+
+Inherited classes are created by defining a struct with the following
+members:
+ \li a base class member
+ \li context specific members
+
+Then you can call interface functions by simply using the base class member
+as the context of the function.
+Note that base classes usually don't have an init function, because they are
+not meant to be used directly and it wouldn't make sense anyway, since they
+provide no functionality, only the interface.
+The usage pattern requires you to declare a context (eg. Flash), initialize
+the context with a specific function call (eg. flash_init()) then use the
+interface funtions to access the context.
+
+To make an example, in BeRTOS the Serial driver is a derived class of the
+KFile interface.
+The KFile interface defines a few interface functions, which can be used to
+extract data from the Serial context.
+\code
+// declare the serial context
+Serial ser;
+// read buffer
+uint8_t buf[20];
+
+int main()
+{
+   // initialize the serial driver
+   ser_init(&ser, SER_UART0);
+   ser_setbaudrate(115200);
+   // now access using the interface functions
+   // read...
+   kfile_read(&ser.fd, buf, 20);
+   // ...and write
+   kfile_printf(&ser.fd, "Writing to serial using KFile interface...\n");
+   // close the driver
+   kfile_close(&ser.fd);
+}
+\endcode
+
+
+*/
+
+
+/**
+\page short_introduction A 5 minute introduction to BeRTOS
+
+\section installation Installing BeRTOS on your system
+
+What do you need when developing an embedded project with BeRTOS?
+\li a toolchain for your CPU
+\li BeRTOS source code :)
+\li supporting binaries for BeRTOS build system
+\li supporting tools for BeRTOS Wizard
+
+See the <a href="http://www.bertos.org/use/tutorial-front-page/installation-instructions/">
+installation instructions page</a> online for help on installing BeRTOS on your system.
+
+Strictly speaking, BeRTOS doesn't need to be 'installed', you can just
+take .c files and compile them in your project.
+
+However, BeRTOS is a complex system with many dependencies between modules.
+It's not easy to track the dependencies for each module, so we have developed
+a set of tools to make dependency tracking automatic.
+
+Contact the <a href="http://forum.bertos.org">support forum</a> and look at
+the section \ref coding  if you want
+help on using BeRTOS without the supporting tools. Be warned, though, that
+this method is not supported and we can only point you in the right direction.
+
+\section organization Project's organization
+
+Each project has its own full BeRTOS sources, configuration and HAL files.
+Why? Because we think that each project has its own life and it must not
+interfere with any other project.
+Let's say you use a shared BeRTOS version for all of your projects. Each
+time you update, you need to check that each and every project still works
+correctly. We don't want to do this (and I bet you don't want either).
+However, it's still easy to update a single project if you want to.
+
+A project named Foo is organized as follows:
+\li bertos/ - BeRTOS source directory
+\li Makefile - BeRTOS build system Makefile
+\li project.bertos - Wizard's configuration file
+\li foo/ - your project's main directory
+\li foo/hw/ - low level HAL files
+\li foo/cfg/ - configuration directory
+\li foo/foo_user.mk - makefile fragment that you can edit
+\li foo/foo.mk - makefile fragment changed by the Wizard, don't edit
+
+See <a href="http://www.bertos.org/use/tutorial-front-page/basic-hal/">BeRTOS HAL system</a>
+for more information on HAL files.
+
+\section coding Coding guidelines
+
+BeRTOS assumes that the BeRTOS source directory and the project's root directory
+(as indicated above) are in the include path.
+This means that you should include configuration files using "..." rather than
+<...> style, otherwise you will use default configuration values instead of
+your project's values.
+
+Also, you should change configuration settings using the Wizard. This is because
+sometimes there are more actions to be done than simply changing a define
+value.
+
+
+*/
+
+
+/*!
+ * \defgroup drivers BeRTOS peripherals drivers
+ *
+ * This section includes all BeRTOS drivers. They may be internal CPU drivers
+ * or CPU independent drivers
+ */
+
+
+/*!
+ * \defgroup core BeRTOS core functionality
+ *
+ * This section includes BeRTOS core functionalities and interfaces.
+ */
+
+
+/*!
+ * \defgroup kern Kernel facilities
+ *
+ * This section describes the kernel facilities and the synchronization
+ * primitives available in BeRTOS.
+ */
+
+/*!
+ * \defgroup mware Middleware facilities
+ *
+ * This section describes various algorithms and standalone code
+ * useful in day to day programming.
+ */
+
+/*!
+ * \defgroup graphics General purpose graphical routines
+ *
+ */
+
+/*!
+ * \defgroup gui BeRTOS GUI toolkit
+ *
+ */
+
+/*!
+ * \defgroup struct Embedded optimized general purpose data types
+ */

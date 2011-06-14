@@ -31,6 +31,10 @@
  *
  * -->
  *
+ * \defgroup io_kfile KFile interface
+ * \ingroup core
+ * \{
+ *
  * \brief Virtual KFile I/O interface.
  *
  * KFile is a simple, generic interface for file I/O.  It uses an
@@ -219,6 +223,12 @@ int kfile_genericClose(struct KFile *fd);
 /**
  * Read \a size bytes from file \a fd into \a buf.
  *
+ * This function reads at most the number of requested bytes into the
+ * provided buffer.
+ * The value returned may be less than the requested bytes in case EOF is
+ * reached OR an error occurred. You need to check the error conditions
+ * using kfile_error() to understand which case happened.
+ *
  * \note This function will block if there are less than \a size bytes
  *       to read.
  *
@@ -234,6 +244,16 @@ INLINE size_t kfile_read(struct KFile *fd, void *buf, size_t size)
 }
 int kfile_gets(struct KFile *fd, char *buf, int size);
 int kfile_gets_echo(struct KFile *fd, char *buf, int size, bool echo);
+
+/**
+ * Copy \a size bytes from file \a src to \a dst.
+ *
+ * \param src Source KFile.
+ * \param dst Destionation KFile.
+ * \param size number of bytes to copy.
+ * \return the number of bytes copied.
+ */
+kfile_off_t kfile_copy(KFile *src, KFile *dst, kfile_off_t size);
 
 /**
  * Write \a size bytes from buffer \a buf into KFile \a fd.
@@ -324,6 +344,8 @@ int kfile_getc(struct KFile *fd);  ///< Generic getc implementation using kfile_
 void kfile_resync(KFile *fd, mtime_t delay);
 void kfile_init(struct KFile *fd);
 /* @} */
+
+/** \} */ //Defgroup io_kfile
 
 /*
  * Kfile test function.

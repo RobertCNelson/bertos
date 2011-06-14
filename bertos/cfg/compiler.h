@@ -54,10 +54,14 @@
 	#pragma c99 on
 #endif
 
-#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)
-	#define COMPILER_C99      1
-#else
-	#define COMPILER_C99      0
+#if defined(__STDC_VERSION__)
+    #if (__STDC_VERSION__ == 199409L) // IAR
+	    #define COMPILER_C99      1  // not true, because partial C99, avoid miscompilation
+    #elif (__STDC_VERSION__ >= 199901L) // GCC
+	    #define COMPILER_C99      1
+    #else
+	    #define COMPILER_C99      0
+    #endif
 #endif
 
 
@@ -105,12 +109,20 @@
 
 	#pragma language=extended
 
-	#if CPU_ARM
+	/* IAR iccarm specific functions */
+	#include <intrinsics.h>
+	#pragma diag_suppress=Pe940
+	#pragma inline = forced
+
+	#define MEMORY_BARRIER		asm("")
+
+	#if CPU_ARM || CPU_CM3
 
 		#define COMPILER_VARIADIC_MACROS 1
 
 		#define INTERRUPT(x)  __irq __arm void x (void)
 		#define INLINE        static inline
+		#define NAKED
 
 		/* Include some standard C89/C99 stuff */
 		#include <stddef.h>
@@ -217,7 +229,7 @@
 	#endif
 
 	/**
-	 * Force compiler to realod context variable.
+	 * Force compiler to reload context variable.
 	 */
 	#define MEMORY_BARRIER           asm volatile ("" : : : "memory")
 
@@ -450,6 +462,9 @@
 	#endif
 #endif
 
+/** User defined callback type */
+typedef void (*Hook)(void *);
+
 /** Bulk storage large enough for both pointers or integers. */
 typedef void * iptr_t;
 
@@ -459,6 +474,14 @@ typedef const void * const_iptr_t;
 typedef unsigned char sigbit_t;  /**< Type for signal bits. */
 typedef unsigned char sigmask_t; /**< Type for signal masks. */
 
+/**
+ * Signal structure
+ */
+typedef struct Signal
+{
+	sigmask_t    wait;    /**< Signals the process is waiting for */
+	sigmask_t    recv;    /**< Received signals */
+} Signal;
 
 /**
  * \name Standard type definitions.
@@ -601,6 +624,17 @@ typedef unsigned char sigmask_t; /**< Type for signal masks. */
 	/** Ensure variable is of specified type. */
 	#define ASSERT_TYPE_IS(var, type)  \
 			do { (void)(&(var) == (type *)0); } while(0)
+#endif
+
+/**
+ * Prevent the compiler from optimizing access to the variable \a x, enforcing
+ * a refetch from memory. This also forbid from reordering successing instances
+ * of ACCESS_SAFE().
+ */
+#ifdef __ICCARM__
+#define ACCESS_SAFE(x) x
+#else
+#define ACCESS_SAFE(x) (*(volatile typeof(x) *)&(x))
 #endif
 
 #endif /* BERTOS_COMPILER_H */

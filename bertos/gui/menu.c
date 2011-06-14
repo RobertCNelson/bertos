@@ -49,6 +49,8 @@
 #include <gfx/font.h>
 #include <gfx/text.h>
 
+#include <cpu/power.h>
+
 #include <drv/kbd.h>
 
 #include <string.h> /* strcpy() */
@@ -269,10 +271,7 @@ static void menu_layout(
 		/* Only print visible items */
 		if (!(item->flags & MIF_HIDDEN))
 		{
-			/* Check if a special render function is supplied, otherwise use defaults */
-			#if (ARCH & ARCH_NIGHTTEST)
-				#warning __FILTER_NEXT_WARNING__
-			#endif
+			#warning __FILTER_NEXT_WARNING__
 			RenderHook renderhook = (item->flags & MIF_RENDERHOOK) ? (RenderHook)item->label : menu_defaultRenderHook;
 
 			/* Render menuitem */
@@ -467,6 +466,7 @@ iptr_t menu_handle(const struct Menu *menu)
 
 		#if CONFIG_MENU_SMOOTH || (CONFIG_MENU_TIMEOUT != 0)
 			key = kbd_peek();
+			cpu_relax();
 		#else
 			key = kbd_get();
 		#endif
@@ -535,9 +535,7 @@ iptr_t menu_handle(const struct Menu *menu)
 
 	/* Store currently selected item before leaving. */
 	if (menu->flags & MF_SAVESEL)
-		#if (ARCH & ARCH_NIGHTTEST)
-			#warning __FILTER_NEXT_WARNING__
-		#endif
+		#warning __FILTER_NEXT_WARNING__
 		CONST_CAST(struct Menu *, menu)->selected = selected;
 
 	return result;

@@ -30,9 +30,7 @@
  *
  * -->
  *
- * \author Bernie Innocenti <bernie@codewiz.org>
- * \author Francesco Sacchi <batt@develer.com>
- * \author Luca Ottaviano <lottaviano@develer.com>
+ * \author Onno <developer@gorgoz.org>
  *
  * \brief Low-level timer module for AVR (implementation).
  *
@@ -41,219 +39,19 @@
  * notest: avr
  */
 
-#include <drv/timer_avr.h>
-#include <cfg/macros.h> // BV()
 
-#include <cpu/types.h>
-#include <cpu/irq.h>
+#ifndef WIZ_AUTOGEN
+	#warning This file is deprecated, you should probably use timer_mega.c
 
-#include <avr/io.h>
+	#include <cpu/detect.h>
 
-#if CPU_AVR_ATMEGA1281 || CPU_AVR_ATMEGA1280 || CPU_AVR_ATMEGA168 || CPU_AVR_ATMEGA328P
-	#define REG_TIFR0 TIFR0
-	#define REG_TIFR1 TIFR1
-	#define REG_TIFR2 TIFR2
-	#if CPU_AVR_ATMEGA1281 || CPU_AVR_ATMEGA1280
-		#define REG_TIFR3 TIFR3
+	#if CPU_AVR_MEGA
+		#include "timer_mega.c"
+	#elif CPU_AVR_XMEGA
+		#include "timer_xmega.c"
+	/*#elif  Add other AVR families here */
+	#else
+		#error Unknown CPU
 	#endif
-
-	#define REG_TIMSK0 TIMSK0
-	#define REG_TIMSK1 TIMSK1
-	#define REG_TIMSK2 TIMSK2
-	#if CPU_AVR_ATMEGA1281 || CPU_AVR_ATMEGA1280
-		#define REG_TIMSK3 TIMSK3
-	#endif
-
-	#define REG_TCCR0A TCCR0A
-	#define REG_TCCR0B TCCR0B
-
-	#define REG_TCCR2A TCCR2A
-	#define REG_TCCR2B TCCR2B
-
-	#define REG_OCR0A  OCR0A
-	#define REG_OCR2A  OCR2A
-
-	#define BIT_OCF0A  OCF0A
-	#define BIT_OCF2A  OCF2A
-
-	#define BIT_OCIE0A OCIE0A
-	#define BIT_OCIE2A OCIE2A
-#else
-	#define REG_TIFR0 TIFR
-	#define REG_TIFR1 TIFR
-	#define REG_TIFR2 TIFR
-	#define REG_TIFR3 TIFR
-
-	#define REG_TIMSK0 TIMSK
-	#define REG_TIMSK1 TIMSK
-	#define REG_TIMSK2 TIMSK
-	#define REG_TIMSK3 ETIMSK
-
-	#define REG_TCCR0A TCCR0
-	#define REG_TCCR0B TCCR0
-
-	#define REG_TCCR2A TCCR2
-	#define REG_TCCR2B TCCR2
-
-	#define REG_OCR0A  OCR0
-	#define REG_OCR2A  OCR2
-
-	#define BIT_OCF0A  OCF0
-	#define BIT_OCF2A  OCF2
-
-	#define BIT_OCIE0A OCIE0
-	#define BIT_OCIE2A OCIE2
-#endif
-
-#if CPU_AVR_ATMEGA128 || CPU_AVR_ATMEGA64 || CPU_AVR_ATMEGA103
-    /* These ATMega have different prescaler options. */
-    #define TIMER0_PRESCALER_64 BV(CS02)
-    #define TIMER2_PRESCALER_64 (BV(CS21) | BV(CS20))
-#else
-    #define TIMER0_PRESCALER_64 (BV(CS01) | BV(CS00))
-    #define TIMER2_PRESCALER_64 BV(CS22)
-#endif
-
-/** HW dependent timer initialization  */
-#if (CONFIG_TIMER == TIMER_ON_OUTPUT_COMPARE0)
-
-	void timer_hw_init(void)
-	{
-		cpu_flags_t flags;
-		IRQ_SAVE_DISABLE(flags);
-
-		/* Reset Timer flags */
-		REG_TIFR0 = BV(BIT_OCF0A) | BV(TOV0);
-
-		/* Setup Timer/Counter interrupt */
-		ASSR = 0x00;                  /* Internal system clock */
-
-		REG_TCCR0A = 0;	// TCCR2 reg could be separate or a unique register with both A & B values, this is needed to
-		REG_TCCR0B = 0;
-
-		REG_TCCR0A = BV(WGM01);             /* Clear on Compare match */
-			#if TIMER_PRESCALER == 64
-			REG_TCCR0B |= TIMER0_PRESCALER_64;
-			#else
-				#error Unsupported value of TIMER_PRESCALER
-			#endif
-
-		TCNT0 = 0x00;                 /* Initialization of Timer/Counter */
-		REG_OCR0A = OCR_DIVISOR;           /* Timer/Counter Output Compare Register */
-
-		/* Enable timer interrupts: Timer/Counter2 Output Compare (OCIE2) */
-		REG_TIMSK0 &= ~BV(TOIE0);
-		REG_TIMSK0 |= BV(BIT_OCIE0A);
-
-		IRQ_RESTORE(flags);
-	}
-
-#elif (CONFIG_TIMER == TIMER_ON_OVERFLOW1)
-
-	void timer_hw_init(void)
-	{
-		cpu_flags_t flags;
-		IRQ_SAVE_DISABLE(flags);
-
-		/* Reset Timer overflow flag */
-		REG_TIFR1 |= BV(TOV1);
-
-		/* Fast PWM mode, 9 bit, 24 kHz, no prescaling. */
-		#if (TIMER_PRESCALER == 1) && (TIMER_HW_BITS == 9)
-			TCCR1A |= BV(WGM11);
-			TCCR1A &= ~BV(WGM10);
-			TCCR1B |= BV(WGM12) | BV(CS10);
-			TCCR1B &= ~(BV(WGM13) | BV(CS11) | BV(CS12));
-		/* Fast PWM mode, 8 bit, 24 kHz, no prescaling. */
-		#elif (TIMER_PRESCALER == 1) && (TIMER_HW_BITS == 8)
-			TCCR1A |= BV(WGM10);
-			TCCR1A &= ~BV(WGM11);
-			TCCR1B |= BV(WGM12) | BV(CS10);
-			TCCR1B &= ~(BV(WGM13) | BV(CS11) | BV(CS12));
-		#else
-			#error Unsupported value of TIMER_PRESCALER or TIMER_HW_BITS
-		#endif
-
-		TCNT1 = 0x00;         /* initialization of Timer/Counter */
-
-		/* Enable timer interrupt: Timer/Counter1 Overflow */
-		REG_TIMSK1 |= BV(TOIE1);
-
-		IRQ_RESTORE(flags);
-	}
-
-#elif (CONFIG_TIMER == TIMER_ON_OUTPUT_COMPARE2)
-	void timer_hw_init(void)
-	{
-		cpu_flags_t flags;
-		IRQ_SAVE_DISABLE(flags);
-
-		/* Reset Timer flags */
-		REG_TIFR2 = BV(BIT_OCF2A) | BV(TOV2);
-
-		/* Setup Timer/Counter interrupt */
-		REG_TCCR2A = 0;	// TCCR2 reg could be separate or a unique register with both A & B values, this is needed to
-		REG_TCCR2B = 0; // ensure correct initialization.
-
-		REG_TCCR2A = BV(WGM21);
-		#if TIMER_PRESCALER == 64
-			REG_TCCR2B |= TIMER2_PRESCALER_64;
-		#else
-			#error Unsupported value of TIMER_PRESCALER
-		#endif
-
-		/* Clear on Compare match & prescaler = 64, internal sys clock.
-		   When changing prescaler change TIMER_HW_HPTICKS_PER_SEC too */
-		TCNT2 = 0x00;         /* initialization of Timer/Counter */
-		REG_OCR2A = (uint8_t)OCR_DIVISOR;   /* Timer/Counter Output Compare Register */
-
-		/* Enable timer interrupts: Timer/Counter2 Output Compare (OCIE2) */
-		REG_TIMSK2 &= ~BV(TOIE2);
-		REG_TIMSK2 |= BV(BIT_OCIE2A);
-
-		IRQ_RESTORE(flags);
-	}
-
-#elif (CONFIG_TIMER == TIMER_ON_OVERFLOW3)
-
-	#if CPU_AVR_ATMEGA168 || CPU_AVR_ATMEGA328P || CPU_AVR_ATMEGA32
-		#error For select target there is not TIMER_ON_OVERFLOW3, please select an other one.
-	#endif
-
-	void timer_hw_init(void)
-	{
-		cpu_flags_t flags;
-		IRQ_SAVE_DISABLE(flags);
-
-		/* Reset Timer overflow flag */
-		REG_TIFR3 |= BV(TOV3);
-
-		/* Fast PWM mode, 9 bit, 24 kHz, no prescaling. */
-		#if (TIMER_PRESCALER == 1) && (TIMER_HW_BITS == 9)
-			TCCR3A |= BV(WGM31);
-			TCCR3A &= ~BV(WGM30);
-			TCCR3B |= BV(WGM32) | BV(CS30);
-			TCCR3B &= ~(BV(WGM33) | BV(CS31) | BV(CS32));
-		/* Fast PWM mode, 8 bit, 24 kHz, no prescaling. */
-		#elif (TIMER_PRESCALER == 1) && (TIMER_HW_BITS == 8)
-			TCCR3A |= BV(WGM30);
-			TCCR3A &= ~BV(WGM31);
-			TCCR3B |= BV(WGM32) | BV(CS30);
-			TCCR3B &= ~(BV(WGM33) | BV(CS31) | BV(CS32));
-		#else
-			#error Unsupported value of TIMER_PRESCALER or TIMER_HW_BITS
-		#endif
-
-		/* initialization of Timer/Counter */
-		TCNT3 = 0x00;
-
-		/* Enable timer interrupt: Timer/Counter3 Overflow */
-		REG_TIMSK3 |= BV(TOIE3);
-
-		IRQ_RESTORE(flags);
-	}
-
-#else
-	#error Unimplemented value for CONFIG_TIMER
-#endif /* CONFIG_TIMER */
+#endif /* WIZ_AUTOGEN */
 

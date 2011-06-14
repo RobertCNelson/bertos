@@ -30,6 +30,10 @@
  * Copyright 2000, 2008 Bernie Innocenti <bernie@codewiz.org>
  * -->
  *
+ * \defgroup drv_timers Timer module
+ * \ingroup core
+ * \{
+ *
  * \brief Hardware independent timer driver.
  *
  * All timer related functions are implemented in this module. You have several options to use timers:
@@ -95,6 +99,9 @@ STATIC_ASSERT(sizeof(hptime_t) == SIZEOF_HPTIME_T);
 #endif
 
 extern volatile ticks_t _clock;
+
+#define TIMER_AFTER(x, y) ((long)(y) - (long)(x) < 0)
+#define TIMER_BEFORE(x, y) TIMER_AFTER(y, x)
 
 /**
  * \brief Return the system tick counter (expressed in ticks)
@@ -284,7 +291,12 @@ INLINE void timer_setSoftint(Timer *timer, Hook func, iptr_t user_data)
 	event_initSoftint(&timer->expire, func, user_data);
 }
 
-/** Set the timer delay (the time before the event will be triggered) */
+/**
+ * Set the timer delay (the time before the event will be triggered)
+ *
+ * \note It's illegal to change the delay of the timer when it's
+ * still running.
+ */
 INLINE void timer_setDelay(Timer *timer, ticks_t delay)
 {
 	timer->_delay = delay;
@@ -303,6 +315,18 @@ void synctimer_poll(List* q);
 
 #if defined(CONFIG_KERN_SIGNALS) && CONFIG_KERN_SIGNALS
 
+/** Set the timer so that it sends a event notification when it expires */
+INLINE void timer_setEvent(Timer *timer)
+{
+	event_initGeneric(&timer->expire);
+}
+
+/** Wait until the timer expires */
+INLINE void timer_waitEvent(Timer *timer)
+{
+	event_wait(&timer->expire);
+}
+
 /** Set the timer so that it sends a signal when it expires */
 INLINE void timer_setSignal(Timer *timer, struct Process *proc, sigmask_t sigs)
 {
@@ -312,5 +336,7 @@ INLINE void timer_setSignal(Timer *timer, struct Process *proc, sigmask_t sigs)
 #define timer_set_event_signal timer_setSignal
 
 #endif /* CONFIG_KERN_SIGNALS */
+
+/** \} */ //defgroup drv_timers
 
 #endif /* DRV_TIMER_H */

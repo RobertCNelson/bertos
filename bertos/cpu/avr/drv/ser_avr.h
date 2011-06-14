@@ -31,80 +31,23 @@
  * -->
  *
  *
- * \author Daniele Basile <asterix@develer.com>
- * \author Luca Ottaviano <lottaviano@develer.com>
+ * \author Onno <developer@gorgoz.org>
  *
  * \brief Low-level serial module for AVR (interface).
  *
  */
+#ifndef SER_AVR_H_
+#define SER_AVR_H_
 
-#ifndef DRV_SER_AVR_H
-#define DRV_SER_AVR_H
+#include <cpu/detect.h>
 
-#include <cfg/macros.h> /* BV() */
-#include <cfg/compiler.h>  /* uint32_t */
-
-typedef uint8_t serstatus_t;
-
-/* Software errors */
-#define SERRF_RXFIFOOVERRUN  BV(0)  /**< Rx FIFO buffer overrun */
-#define SERRF_RXTIMEOUT      BV(5)  /**< Receive timeout */
-#define SERRF_TXTIMEOUT      BV(6)  /**< Transmit timeout */
-
-/*
-* Hardware errors.
-* These flags map directly to the AVR UART Status Register (USR).
-*/
-#define SERRF_RXSROVERRUN    BV(3)  /**< Rx shift register overrun */
-#define SERRF_FRAMEERROR     BV(4)  /**< Stop bit missing */
-#define SERRF_PARITYERROR    BV(7)  /**< Parity error */
-#define SERRF_NOISEERROR     0      /**< Unsupported */
-
-
-/**
- * SPI clock polarity.
- *
- * $WIZ$ ser_spi_pol = "SPI_NORMAL_LOW", "SPI_NORMAL_HIGH"
- * }
- */
-#define SPI_NORMAL_LOW      0
-#define SPI_NORMAL_HIGH     1
-
-/**
- * SPI clock phase.
- *
- * $WIZ$ ser_spi_phase = "SPI_SAMPLE_ON_FIRST_EDGE", "SPI_SAMPLE_ON_SECOND_EDGE"
- * }
- */
-#define SPI_SAMPLE_ON_FIRST_EDGE    0
-#define SPI_SAMPLE_ON_SECOND_EDGE   1
-
-/**
- * \name Serial hw numbers
- *
- * \{
- */
-enum
-{
-#if  CPU_AVR_ATMEGA1280
-	SER_UART0,
-	SER_UART1,
-	SER_UART2,
-	SER_UART3,
-	SER_SPI,
-#elif  CPU_AVR_ATMEGA64 || CPU_AVR_ATMEGA128 || CPU_AVR_ATMEGA1281
-	SER_UART0,
-	SER_UART1,
-	SER_SPI,
-#elif CPU_AVR_ATMEGA103 || CPU_AVR_ATMEGA8 || CPU_AVR_ATMEGA32 || CPU_AVR_ATMEGA168 \
-		|| CPU_AVR_ATMEGA328P
-	SER_UART0,
-	SER_SPI,
+#if CPU_AVR_MEGA
+	#include "ser_mega.h"
+#elif CPU_AVR_XMEGA
+	#include "ser_xmega.h"
+/*#elif  Add other AVR families here */
 #else
-	#error unknown architecture
+	#error Unknown CPU
 #endif
-	SER_CNT  /**< Number of serial ports */
-};
-/*\}*/
 
-#endif /* DRV_SER_AVR_H */
+#endif /* SER_AVR_H_ */

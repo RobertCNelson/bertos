@@ -91,6 +91,7 @@
 	#endif
 	#define SER_UART0_BUS_TXINIT do { \
 		PIOA_PDR = BV(RXD0) | BV(TXD0); \
+		PIO_PERIPH_SEL(PIOA_BASE, BV(RXD0) | BV(TXD0), USART0_PERIPH); \
 	} while (0)
 #endif
 
@@ -119,7 +120,7 @@
 
 /* End USART0 macros */
 
-#if !CPU_CM3_SAM3U
+#if USART_PORTS > 1
 
 	#ifndef SER_UART1_BUS_TXINIT
 		/**
@@ -127,20 +128,13 @@
 		 *
 		 * - Disable GPIO on USART1 tx/rx pins
 		 */
-		#if CPU_ARM_AT91
-			#if !CPU_ARM_SAM7S_LARGE && !CPU_ARM_SAM7X
-				#warning Check USART1 pins!
-			#endif
-			#define SER_UART1_BUS_TXINIT do { \
-				PIOA_PDR = BV(RXD1) | BV(TXD1); \
-			} while (0)
-		#elif CPU_CM3_SAM3
-			#define SER_UART1_BUS_TXINIT do { \
-				PIOB_PDR = BV(RXD1) | BV(TXD1); \
-			} while (0)
-		#else
-			#error Unknown CPU
+		#if CPU_ARM_AT91 && !CPU_ARM_SAM7S_LARGE && !CPU_ARM_SAM7X
+			#warning Check USART1 pins!
 		#endif
+		#define SER_UART1_BUS_TXINIT do { \
+			PIOA_PDR = BV(RXD1) | BV(TXD1); \
+			PIO_PERIPH_SEL(PIOA_BASE, BV(RXD1) | BV(TXD1), USART1_PERIPH); \
+		} while (0)
 	#endif
 
 	#ifndef SER_UART1_BUS_TXBEGIN
@@ -186,9 +180,8 @@
 		#define SER_SPI0_BUS_TXINIT do { \
 			/* Disable PIO on SPI pins */ \
 			PIOA_PDR = BV(SPI0_SPCK) | BV(SPI0_MOSI) | BV(SPI0_MISO); \
-			/* PIO is peripheral A */ \
-			PIOA_ABCDSR1 &= ~(BV(SPI0_SPCK) | BV(SPI0_MOSI) | BV(SPI0_MISO)); \
-			PIOA_ABCDSR2 &= ~(BV(SPI0_SPCK) | BV(SPI0_MOSI) | BV(SPI0_MISO)); \
+			/* SPI is peripheral A on SAM3X,A,N,S,U */ \
+			PIO_PERIPH_SEL(PIOA_BASE, BV(SPI0_SPCK) | BV(SPI0_MOSI) | BV(SPI0_MISO), PIO_PERIPH_A); \
 		} while (0)
 	#else
 		#define SER_SPI0_BUS_TXINIT do { \
@@ -296,7 +289,7 @@ extern struct Serial *ser_handles[SER_CNT];
 /* TX and RX buffers */
 static unsigned char uart0_txbuffer[CONFIG_UART0_TXBUFSIZE];
 static unsigned char uart0_rxbuffer[CONFIG_UART0_RXBUFSIZE];
-#if !CPU_CM3_SAM3U
+#if USART_PORTS > 1
 static unsigned char uart1_txbuffer[CONFIG_UART1_TXBUFSIZE];
 static unsigned char uart1_rxbuffer[CONFIG_UART1_RXBUFSIZE];
 #endif
@@ -330,7 +323,7 @@ struct ArmSerial
 };
 
 static ISR_PROTO(uart0_irq_dispatcher);
-#if !CPU_CM3_SAM3U
+#if USART_PORTS > 1
 static ISR_PROTO(uart1_irq_dispatcher);
 #endif
 static ISR_PROTO(spi0_irq_handler);
@@ -345,7 +338,7 @@ static void uart0_init(
 	UNUSED_ARG(struct Serial *, ser))
 {
 	US0_IDR = 0xFFFFFFFF;
-	PMC_PCER = BV(US0_ID);
+	pmc_periphEnable(US0_ID);
 
 	/*
 	 * - Reset USART0
@@ -427,6 +420,9 @@ static void uart0_setparity(UNUSED_ARG(struct SerialHardware *, _hw), int parity
 			ASSERT(0);
 	}
 }
+
+#if USART_PORTS > 1
+
 /*
  * Callbacks for USART1
  */
@@ -435,7 +431,7 @@ static void uart1_init(
 	UNUSED_ARG(struct Serial *, ser))
 {
 	US1_IDR = 0xFFFFFFFF;
-	PMC_PCER = BV(US1_ID);
+	pmc_periphEnable(US1_ID);
 
 	/*
 	 * - Reset USART1
@@ -518,6 +514,8 @@ static void uart1_setparity(UNUSED_ARG(struct SerialHardware *, _hw), int parity
 	}
 }
 
+#endif /* USART_PORTS > 1 */
+
 /* SPI driver */
 static void spi0_init(UNUSED_ARG(struct SerialHardware *, _hw), UNUSED_ARG(struct Serial *, ser))
 {
@@ -549,7 +547,7 @@ static void spi0_init(UNUSED_ARG(struct SerialHardware *, _hw), UNUSED_ARG(struc
 
 	//sysirq_setPriority(INT_SPI0, SERIRQ_PRIORITY);
 	sysirq_setHandler(INT_SPI0, spi0_irq_handler);
-	PMC_PCER = BV(SPI0_ID);
+	pmc_periphEnable(SPI0_ID);
 
 	/* Enable SPI */
 	SPI0_CR = BV(SPI_SPIEN);
@@ -627,7 +625,7 @@ static void spi1_init(UNUSED_ARG(struct SerialHardware *, _hw), UNUSED_ARG(struc
 
 	sysirq_setPriority(INT_SPI1, SERIRQ_PRIORITY);
 	sysirq_setHandler(INT_SPI1, spi1_irq_dispatcher);
-	PMC_PCER = BV(SPI1_ID);
+	pmc_periphEnable(SPI1_ID);
 
 	/* Enable SPI */
 	SPI1_CR = BV(SPI_SPIEN);
@@ -709,6 +707,8 @@ static const struct SerialHardwareVT UART0_VT =
 	C99INIT(txSending, tx_sending),
 };
 
+#if USART_PORTS > 1
+
 static const struct SerialHardwareVT UART1_VT =
 {
 	C99INIT(init, uart1_init),
@@ -718,6 +718,8 @@ static const struct SerialHardwareVT UART1_VT =
 	C99INIT(txStart, uart1_enabletxirq),
 	C99INIT(txSending, tx_sending),
 };
+
+#endif /* USART_PORTS > 1 */
 
 static const struct SerialHardwareVT SPI0_VT =
 {
@@ -752,6 +754,7 @@ static struct ArmSerial UARTDescs[SER_CNT] =
 		},
 		C99INIT(sending, false),
 	},
+#if USART_PORTS > 1
 	{
 		C99INIT(hw, /**/) {
 			C99INIT(table, &UART1_VT),
@@ -762,6 +765,7 @@ static struct ArmSerial UARTDescs[SER_CNT] =
 		},
 		C99INIT(sending, false),
 	},
+#endif
 
 	{
 		C99INIT(hw, /**/) {
@@ -857,6 +861,8 @@ static DECLARE_ISR(uart0_irq_dispatcher)
 	SER_INT_ACK;
 }
 
+#if USART_PORTS > 1
+
 /**
  * Serial 1 TX interrupt handler
  */
@@ -919,6 +925,8 @@ static DECLARE_ISR(uart1_irq_dispatcher)
 
 	SER_INT_ACK;
 }
+
+#endif /* USART_PORTS > 1 */
 
 /**
  * SPI0 interrupt handler

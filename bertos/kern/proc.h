@@ -30,7 +30,56 @@
  * Copyright 1999, 2000, 2001, 2008 Bernie Innocenti <bernie@codewiz.org>
  * -->
  *
+ * \defgroup kern_proc Process (Threads) management
+ * \ingroup kern
+ * \{
+ *
  * \brief BeRTOS Kernel core (Process scheduler).
+ *
+ * This is the core kernel module. It allows you to create new processes
+ * (which are called \b threads in other systems) and set the priority of
+ * each process.
+ *
+ * A process needs a work area (called \b stack) to run. To create a process,
+ * you need to declare a stack area, then create the process.
+ * You may also pass NULL for the stack area, if you have enabled kernel heap:
+ * in this case the stack will be automatically allocated.
+ *
+ * Example:
+ * \code
+ * PROC_DEFINE_STACK(stack1, 200);
+ *
+ * void NORETURN proc1_run(void)
+ * {
+ *    while (1)
+ *    {
+ *       LOG_INFO("I'm alive!\n");
+ *       timer_delay(1000);
+ *    }
+ * }
+ *
+ *
+ * int main()
+ * {
+ *    Process *p1 = proc_new(proc1_run, NULL, stack1, sizeof(stack1));
+ *    // here the process is already running
+ *    proc_setPri(p1, 2);
+ *    // ...
+ * }
+ * \endcode
+ *
+ * The Process struct must be regarded as an opaque data type, do not access
+ * any of its members directly.
+ *
+ * The entry point function should be declared as NORETURN, because it will
+ * remove a warning and enable compiler optimizations.
+ *
+ * You can temporarily disable preemption calling proc_forbid(); remember
+ * to enable it again calling proc_permit().
+ *
+ * \note You should hardly need to manually release the CPU; however you
+ *       can do it using the cpu_relax() function. It is illegal to release
+ *       the CPU with preemption disabled.
  *
  * \author Bernie Innocenti <bernie@codewiz.org>
  *
@@ -46,6 +95,7 @@
 #include "cfg/cfg_proc.h"
 #include "cfg/cfg_signal.h"
 #include "cfg/cfg_monitor.h"
+#include "sem.h"
 
 #include <struct/list.h> // Node, PriNode
 
@@ -54,6 +104,13 @@
 
 #include <cpu/types.h> // cpu_stack_t
 #include <cpu/frame.h> // CPU_SAVED_REGS_CNT
+
+/* The following silents warnings on nightly tests. We need to regenerate
+ * all the projects before this can be removed.
+ */
+#ifndef CONFIG_KERN_PRI_INHERIT
+#define CONFIG_KERN_PRI_INHERIT 0
+#endif
 
 /*
  * WARNING: struct Process is considered private, so its definition can change any time
@@ -66,6 +123,12 @@ typedef struct Process
 {
 #if CONFIG_KERN_PRI
 	PriNode      link;        /**< Link Process into scheduler lists */
+# if CONFIG_KERN_PRI_INHERIT
+	PriNode      inh_link;    /**< Link Process into priority inheritance lists */
+	List         inh_list;    /**< Priority inheritance list for this Process */
+	Semaphore    *inh_blocked_by;  /**< Semaphore blocking this Process */
+	int          orig_pri;    /**< Process priority without considering inheritance */
+# endif
 #else
 	Node         link;        /**< Link Process into scheduler lists */
 #endif
@@ -73,8 +136,7 @@ typedef struct Process
 	iptr_t       user_data;   /**< Custom data passed to the process */
 
 #if CONFIG_KERN_SIGNALS
-	sigmask_t    sig_wait;    /**< Signals the process is waiting for */
-	sigmask_t    sig_recv;    /**< Received signals */
+	Signal       sig;
 #endif
 
 #if CONFIG_KERN_HEAP
@@ -137,7 +199,7 @@ struct Process *proc_new_with_name(const char *name, void (*entry)(void), iptr_t
  */
 void proc_exit(void);
 
-/**
+/*
  * Public scheduling class methods.
  */
 void proc_yield(void);
@@ -396,5 +458,6 @@ INLINE struct Process *proc_current(void)
 		#error No cpu_stack_t size supported!
 	#endif
 #endif
+/** \} */ //defgroup kern_proc
 
 #endif /* KERN_PROC_H */

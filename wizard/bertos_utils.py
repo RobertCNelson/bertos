@@ -118,7 +118,7 @@ def projectFileGenerator(project_info):
     for module, information in project_info.info("MODULES").items():
         if information["enabled"]:
             enabled_modules.append(module)
-    project_data["ENABLED_MODULES"] = enabled_modules
+    project_data["ENABLED_MODULES"] = sorted(enabled_modules)
     if project_info.info("PRESET"):
         # For presets save again the BERTOS_PATH into project file
         project_data["PRESET"] = True
@@ -133,13 +133,15 @@ def projectFileGenerator(project_info):
     project_data["PROJECT_NAME"] = project_info.info("PROJECT_NAME", os.path.basename(directory))
     project_src_relpath = relpath.relpath(project_info.info("PROJECT_SRC_PATH"), directory)
     project_data["PROJECT_SRC_PATH"] = project_src_relpath
-    project_data["TOOLCHAIN"] = project_info.info("TOOLCHAIN")
+    project_data["PROJECT_SRC_PATH_FROM_MAKEFILE"] = project_info.info("PROJECT_SRC_PATH_FROM_MAKEFILE")
+    project_data["TOOLCHAIN"] = {'path': project_info.info("TOOLCHAIN")['path']}
     project_data["CPU_NAME"] = project_info.info("CPU_NAME")
     project_data["SELECTED_FREQ"] = project_info.info("SELECTED_FREQ")
     project_data["OUTPUT"] = project_info.info("OUTPUT")
     project_data["WIZARD_VERSION"] = WIZARD_VERSION
     project_data["PRESET"] = project_info.info("PRESET")
     project_data["PROJECT_HW_PATH"] = relpath.relpath(project_info.info("PROJECT_HW_PATH"), directory)
+    project_data["PROJECT_HW_PATH_FROM_MAKEFILE"] = project_info.info("PROJECT_HW_PATH_FROM_MAKEFILE")
     return pickle.dumps(project_data)
 
 def loadPlugin(plugin):
@@ -170,7 +172,7 @@ def userMkGenerator(project_info):
     # Deadly performances loss was here :(
     mk_data = {}
     mk_data["$pname"] = os.path.basename(project_info.info("PROJECT_PATH"))
-    mk_data["$ppath"] = relpath.relpath(project_info.info("PROJECT_SRC_PATH"), project_info.info("PROJECT_PATH"))
+    mk_data["$ppath"] = project_info.info("PROJECT_SRC_PATH_FROM_MAKEFILE")
     mk_data["$main"] = "/".join(["$(%s_SRC_PATH)" %project_info.info("PROJECT_NAME"), "main.c"])
     for key in mk_data:
         makefile = makefile.replace(key, mk_data[key])
@@ -185,7 +187,7 @@ def mkGenerator(project_info):
     destination = os.path.join(prjdir, os.path.basename(prjdir) + ".mk")
     mk_data = {}
     mk_data["$pname"] = project_info.info("PROJECT_NAME")
-    mk_data["$ppath"] = relpath.relpath(project_info.info("PROJECT_SRC_PATH"), project_info.info("PROJECT_PATH"))
+    mk_data["$ppath"] = project_info.info("PROJECT_SRC_PATH_FROM_MAKEFILE")
     mk_data["$cpuclockfreq"] = project_info.info("SELECTED_FREQ")
     cpu_mk_parameters = []
     for key, value in project_info.info("CPU_INFOS").items():
@@ -195,7 +197,7 @@ def mkGenerator(project_info):
     mk_data["$csrc"], mk_data["$pcsrc"], mk_data["$cppasrc"], mk_data["$cxxsrc"], mk_data["$asrc"], mk_data["$constants"] = csrcGenerator(project_info)
     mk_data["$prefix"] = replaceSeparators(project_info.info("TOOLCHAIN")["path"].rsplit("gcc", 1)[0])
     mk_data["$suffix"] = replaceSeparators(project_info.info("TOOLCHAIN")["path"].rsplit("gcc", 1)[1])
-    mk_data["$hwpath"] = relpath.relpath(project_info.info("PROJECT_HW_PATH"), project_info.info("PROJECT_PATH"))
+    mk_data["$hwpath"] = project_info.info("PROJECT_HW_PATH_FROM_MAKEFILE")
     for key in mk_data:
         makefile = makefile.replace(key, mk_data[key])
     open(destination, "w").write(makefile)
@@ -209,7 +211,7 @@ def makefileGenerator(project_info):
     # TODO write a general function that works for both the mk file and the Makefile
     mk_data = {}
     mk_data["$pname"] = project_info.info("PROJECT_NAME")
-    mk_data["$ppath"] = relpath.relpath(project_info.info("PROJECT_SRC_PATH"), project_info.info("PROJECT_PATH"))
+    mk_data["$ppath"] = project_info.info("PROJECT_SRC_PATH_FROM_MAKEFILE")
     for key in mk_data:
         makefile = makefile.replace(key, mk_data[key])
     open(destination, "w").write(makefile)
@@ -271,17 +273,17 @@ def csrcGenerator(project_info):
         cxxsrc.append(file)
     for file in project_info.info("CPU_INFOS")["ASRC"]:
         asrc.append(file)
-    csrc = set(csrc)
+    csrc = sorted(set(csrc))
     csrc = " \\\n\t".join(csrc) + " \\"
-    pcsrc = set(pcsrc)
+    pcsrc = sorted(set(pcsrc))
     pcsrc = " \\\n\t".join(pcsrc) + " \\"
-    cppasrc = set(cppasrc)
+    cppasrc = sorted(set(cppasrc))
     cppasrc = " \\\n\t".join(cppasrc) + " \\"
-    cxxsrc = set(cxxsrc)
+    cxxsrc = sorted(set(cxxsrc))
     cxxsrc = " \\\n\t".join(cxxsrc) + " \\"
-    asrc = set(asrc)
+    asrc = sorted(set(asrc))
     asrc = " \\\n\t".join(asrc) + " \\"
-    constants = "\n".join([os.path.basename(project_info.info("PROJECT_PATH")) + "_" + key + " = " + unicode(value) for key, value in constants.items()])
+    constants = "\n".join([project_info.info("PROJECT_NAME") + "_" + key + " = " + unicode(value) for key, value in constants.items()])
     return csrc, pcsrc, cppasrc, cxxsrc, asrc, constants
 
 def findModuleFiles(module, project_info):
@@ -338,11 +340,16 @@ def replaceSeparators(path):
 
 def getSystemPath():
     path = os.environ["PATH"]
-    if os.name == "nt":
-        path = path.split(";")
-    else:
-        path = path.split(":")
+    path = path.split(os.pathsep)
     return path
+
+def findInPath(file, path=None):
+    if path is None:
+        path = os.environ.get('PATH', '')
+    if type(path) is type(''):
+        path = path.split(os.pathsep)
+    return filter(os.path.exists, map(lambda dir, file=file: os.path.join(dir, file), path))
+
 
 def findToolchains(path_list):
     toolchains = []

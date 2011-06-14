@@ -34,7 +34,12 @@
  *
  * \brief Generic USB mouse device driver.
  *
+ * notest: avr
+ * notest: arm
  */
+
+#include "usb_hid.h"
+#include "usbmouse.h"
 
 #include "cfg/cfg_usbmouse.h"
 
@@ -52,8 +57,6 @@
 #include <drv/usb.h>
 #include <drv/usb_endpoint.h>
 
-#include "drv/usb_hid.h"
-#include "drv/usbmouse.h"
 
 /*
  * HID device configuration (usb-mouse)

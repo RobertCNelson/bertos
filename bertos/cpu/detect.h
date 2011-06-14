@@ -37,12 +37,12 @@
 #define CPU_DETECT_H
 
 #if defined(__ARM_ARCH_4T__) /* GCC */ \
-	|| defined(__ARM4TM__) /* IAR: defined for all cores >= 4tm */
+	|| (defined(__ICCARM__) && (__CORE__== __ARM4TM__)) /* IAR: defined for all cores == 4tm */
 	#define CPU_ARM 1
 	#define CPU_ID	arm
 	#define CPU_CORE_NAME		 "ARM7TDMI"
 
-	// AT91SAM7S core family
+    // AT91SAM7S products serie
 	#if defined(__ARM_AT91SAM7S32__)
 		#define CPU_ARM_AT91         1
 		#define CPU_ARM_AT91SAM7S32  1
@@ -87,7 +87,7 @@
 		#define CPU_ARM_AT91SAM7S512 0
 	#endif
 
-	// AT91SAM7X core family
+	// AT91SAM7X products serie
 	#if defined(__ARM_AT91SAM7X128__)
 		#define CPU_ARM_AT91         1
 		#define CPU_ARM_SAM7X        1
@@ -183,7 +183,8 @@
 	#define CPU_ARM_LPC2378         0
 #endif
 
-#if defined(__ARM_ARCH_7M__)
+#if defined(__ARM_ARCH_7M__) /* GCC */ \
+    || (defined(__ICCARM__) && (__CORE__== __ARM7M__)) /* IAR: defined for all cores v7M */
 	/* Cortex-M3 */
 	#define CPU_CM3 1
 	#define CPU_ID	cm3
@@ -205,6 +206,22 @@
 		#define CPU_CM3_LM3S8962    0
 	#endif
 
+	#if defined (__ARM_STM32F100RB__)
+		#define CPU_CM3_STM32       1
+		#define CPU_CM3_STM32F100RB 1
+		#define CPU_NAME            "STM32F100RB"
+	#else
+		#define CPU_CM3_STM32F100RB 0
+	#endif
+
+	#if defined (__ARM_STM32F101C4__)
+		#define CPU_CM3_STM32       1
+		#define CPU_CM3_STM32F101C4 1
+		#define CPU_NAME            "STM32F101C4"
+	#else
+		#define CPU_CM3_STM32F101C4 0
+	#endif
+
 	#if defined (__ARM_STM32F103RB__)
 		#define CPU_CM3_STM32       1
 		#define CPU_CM3_STM32F103RB 1
@@ -213,6 +230,15 @@
 		#define CPU_CM3_STM32F103RB 0
 	#endif
 
+	#if defined (__ARM_STM32F103RE__)
+		#define CPU_CM3_STM32       1
+		#define CPU_CM3_STM32F103RE 1
+		#define CPU_NAME            "STM32F103RE"
+	#else
+		#define CPU_CM3_STM32F103RE 0
+	#endif
+
+	// AT91SAM3N products serie
 	#if defined (__ARM_SAM3N4__)
 		#define CPU_CM3_SAM3    1
 		#define CPU_CM3_SAM3N   1
@@ -223,10 +249,12 @@
 		#define CPU_CM3_SAM3U   0
 		#define CPU_CM3_SAM3N2  0
 		#define CPU_CM3_SAM3N1  0
+		#define CPU_CM3_SAM3X   0
 	#else
 		#define CPU_CM3_SAM3N4  0
 	#endif
 
+	// AT91SAM3S products serie
 	#if defined (__ARM_SAM3S4__)
 		#define CPU_CM3_SAM3    1
 		#define CPU_CM3_SAM3S   1
@@ -235,10 +263,12 @@
 
 		#define CPU_CM3_SAM3N   0
 		#define CPU_CM3_SAM3U   0
+		#define CPU_CM3_SAM3X   0
 	#else
 		#define CPU_CM3_SAM3S4  0
 	#endif
 
+	// AT91SAM3U products serie
 	#if defined (__ARM_SAM3U4__)
 		#define CPU_CM3_SAM3    1
 		#define CPU_CM3_SAM3U   1
@@ -247,8 +277,23 @@
 
 		#define CPU_CM3_SAM3N   0
 		#define CPU_CM3_SAM3S   0
+		#define CPU_CM3_SAM3X   0
 	#else
 		#define CPU_CM3_SAM3U4  0
+	#endif
+
+	// AT91SAM3X products serie
+	#if defined (__ARM_SAM3X8__)
+		#define CPU_CM3_SAM3    1
+		#define CPU_CM3_SAM3X   1
+		#define CPU_CM3_SAM3X8  1
+		#define CPU_NAME        "SAM3X8"
+
+		#define CPU_CM3_SAM3N   0
+		#define CPU_CM3_SAM3S   0
+		#define CPU_CM3_SAM3U   0
+	#else
+		#define CPU_CM3_SAM3X8  0
 	#endif
 
 	#if defined (CPU_CM3_LM3S)
@@ -258,16 +303,16 @@
 		#define CPU_CM3_STM32       0
 		#define CPU_CM3_SAM3        0
 	#elif defined (CPU_CM3_STM32)
-		#if CPU_CM3_STM32F103RB + 0 != 1
+		#if CPU_CM3_STM32F100RB + CPU_CM3_STM32F101C4 + CPU_CM3_STM32F103RB + CPU_CM3_STM32F103RE + 0 != 1
 			#error STM32 Cortex-M3 CPU configuration error
 		#endif
 		#define CPU_CM3_LM3S        0
 		#define CPU_CM3_SAM3        0
 	#elif defined (CPU_CM3_SAM3)
-		#if CPU_CM3_SAM3N + 0 != 1
+		#if CPU_CM3_SAM3N + CPU_CM3_SAM3U + CPU_CM3_SAM3S + CPU_CM3_SAM3X + 0 != 1
 			#error SAM3 Cortex-M3 CPU configuration error
 		#endif
-		#if CPU_CM3_SAM3N4 + CPU_CM3_SAM3S4 + CPU_CM3_SAM3U4 + 0 != 1
+		#if CPU_CM3_SAM3N4 + CPU_CM3_SAM3S4 + CPU_CM3_SAM3U4 + CPU_CM3_SAM3X8 + 0 != 1
 			#error SAM3 Cortex-M3 CPU configuration error
 		#endif
 		#define CPU_CM3_LM3S        0
@@ -291,15 +336,20 @@
 	#define CPU_CM3_LM3S8962 0
 
 	#define CPU_CM3_STM32 0
+	#define CPU_CM3_STM32F100RB 0
 	#define CPU_CM3_STM32F103RB 0
+	#define CPU_CM3_STM32F101C4 0
+	#define CPU_CM3_STM32F103RE 0
 
 	#define CPU_CM3_SAM3 0
 	#define CPU_CM3_SAM3N 0
 	#define CPU_CM3_SAM3N4 0
+	#define CPU_CM3_SAM3X 0
+	#define CPU_CM3_SAM3X8 0
 #endif
 
 #if (defined(__IAR_SYSTEMS_ICC__) || defined(__IAR_SYSTEMS_ICC)) \
-	&& !defined(__ARM4TM__) /* IAR: if not ARM assume I196 */
+	&& !defined(__ICCARM__) /* IAR: if not ARM assume I196 */
 	#warning Assuming CPU is I196
 	#define CPU_I196		1
 	#define CPU_ID                  i196
@@ -361,6 +411,7 @@
 	#define CPU_CORE_NAME           "AVR"
 
 	#if defined(__AVR_ATmega32__)
+		#define CPU_AVR_MEGA		1
 		#define CPU_AVR_ATMEGA32    1
 		#define CPU_NAME            "ATmega32"
 	#else
@@ -368,6 +419,7 @@
 	#endif
 
 	#if defined(__AVR_ATmega64__)
+		#define CPU_AVR_MEGA		1
 		#define CPU_AVR_ATMEGA64    1
 		#define CPU_NAME            "ATmega64"
 	#else
@@ -375,6 +427,7 @@
 	#endif
 
 	#if defined(__AVR_ATmega103__)
+		#define CPU_AVR_MEGA		1
 		#define CPU_AVR_ATMEGA103   1
 		#define CPU_NAME            "ATmega103"
 	#else
@@ -382,6 +435,7 @@
 	#endif
 
 	#if defined(__AVR_ATmega128__)
+		#define CPU_AVR_MEGA		1
 		#define CPU_AVR_ATMEGA128   1
 		#define CPU_NAME            "ATmega128"
 	#else
@@ -389,6 +443,7 @@
 	#endif
 
 	#if defined(__AVR_ATmega8__)
+		#define CPU_AVR_MEGA		1
 		#define CPU_AVR_ATMEGA8     1
 		#define CPU_NAME            "ATmega8"
 	#else
@@ -396,6 +451,7 @@
 	#endif
 
 	#if defined(__AVR_ATmega168__)
+		#define CPU_AVR_MEGA		1
 		#define CPU_AVR_ATMEGA168   1
 		#define CPU_NAME            "ATmega168"
 	#else
@@ -403,6 +459,7 @@
 	#endif
 
 	#if defined(__AVR_ATmega328P__)
+		#define CPU_AVR_MEGA		1
 		#define CPU_AVR_ATMEGA328P   1
 		#define CPU_NAME            "ATmega328P"
 	#else
@@ -410,6 +467,7 @@
 	#endif
 
 	#if defined(__AVR_ATmega1281__)
+		#define CPU_AVR_MEGA		1
 		#define CPU_AVR_ATMEGA1281  1
 		#define CPU_NAME            "ATmega1281"
 	#else
@@ -417,19 +475,52 @@
 	#endif
 
 	#if defined(__AVR_ATmega1280__)
+		#define CPU_AVR_MEGA		1
 		#define CPU_AVR_ATMEGA1280  1
 		#define CPU_NAME            "ATmega1280"
 	#else
 		#define CPU_AVR_ATMEGA1280  0
 	#endif
 
+	#if defined(__AVR_ATmega2560__)
+		#define CPU_AVR_MEGA		1
+		#define CPU_AVR_ATMEGA2560  1
+		#define CPU_NAME            "ATmega2560"
+	#else
+		#define CPU_AVR_ATMEGA2560  0
+	#endif
+
+	#if defined(__AVR_ATxmega32D4__)
+		#define CPU_AVR_XMEGA		1
+		#define CPU_AVR_XMEGA_D		1
+		#define CPU_AVR_ATXMEGA32D4	1
+		#define CPU_NAME			"ATxmega32d4"
+	#else
+		#define CPU_AVR_ATXMEGA32D4	0
+	#endif
+
 	#if CPU_AVR_ATMEGA32 + CPU_AVR_ATMEGA64 + CPU_AVR_ATMEGA103 + CPU_AVR_ATMEGA128 \
 	  + CPU_AVR_ATMEGA8 + CPU_AVR_ATMEGA168 + CPU_AVR_ATMEGA328P + CPU_AVR_ATMEGA1281 \
-	  + CPU_AVR_ATMEGA1280 != 1
+	  + CPU_AVR_ATMEGA1280 + CPU_AVR_ATMEGA2560 + CPU_AVR_ATXMEGA32D4 != 1
 		#error AVR CPU configuration error
 	#endif
+
+	#if defined(CPU_AVR_XMEGA) && defined(CPU_AVR_MEGA)
+		#error CPU cannot be MEGA and XMEGA
+	#elif defined(CPU_AVR_MEGA)
+		#define CPU_AVR_XMEGA		0
+		#define CPU_AVR_XMEGA_D		0
+	#elif defined(CPU_AVR_XMEGA)
+		#define CPU_AVR_MEGA		0
+	#endif
+
+	#if CPU_AVR_MEGA + CPU_AVR_XMEGA != 1
+		#error AVR CPU configuration error
+	#endif
+
 #else
 	#define CPU_AVR                 0
+	#define CPU_AVR_MEGA			0
 	#define CPU_AVR_ATMEGA8         0
 	#define CPU_AVR_ATMEGA168       0
 	#define CPU_AVR_ATMEGA328P      0
@@ -439,6 +530,9 @@
 	#define CPU_AVR_ATMEGA128       0
 	#define CPU_AVR_ATMEGA1281      0
 	#define CPU_AVR_ATMEGA1280      0
+	#define CPU_AVR_ATMEGA2560      0
+	#define CPU_AVR_XMEGA			0
+	#define CPU_AVR_XMEGA_D			0
 #endif
 
 #if defined (__MSP430__)

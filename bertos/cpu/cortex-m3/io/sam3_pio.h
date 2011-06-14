@@ -79,6 +79,12 @@
 #define PIOA_BASE  0x400E0E00
 #define PIOB_BASE  0x400E1000
 #define PIOC_BASE  0x400E1200
+
+#if CPU_CM3_SAM3X
+	#define PIOD_BASE  0x400E1400
+	#define PIOE_BASE  0x400E1600
+	#define PIOF_BASE  0x400E1800
+#endif
 /*\}*/
 
 /** PIO Register Offsets */
@@ -106,52 +112,23 @@
 #define PIO_PUDR_OFF    0x00000060  ///< Pull-up disable register offset.
 #define PIO_PUER_OFF    0x00000064  ///< Pull-up enable register offset.
 #define PIO_PUSR_OFF    0x00000068  ///< Pull-up status register offset.
-#define PIO_ABCDSR1_OFF 0x00000070  ///< PIO peripheral select register 1 offset.
-#define PIO_ABCDSR2_OFF 0x00000074  ///< PIO peripheral select register 2 offset.
+#if CPU_CM3_SAM3X || CPU_CM3_SAM3U
+	#define PIO_ABSR_OFF     0x00000070  ///< PIO peripheral select register offset.
+#elif CPU_CM3_SAM3N || CPU_CM3_SAM3S
+	#define PIO_ABCDSR1_OFF  0x00000070  ///< PIO peripheral select register 1 offset.
+	#define PIO_ABCDSR2_OFF  0x00000074  ///< PIO peripheral select register 2 offset.
+#else
+	#error Undefined PIO peripheral select register for selected cpu
+#endif
 #define PIO_OWER_OFF    0x000000A0  ///< PIO output write enable register offset.
 #define PIO_OWDR_OFF    0x000000A4  ///< PIO output write disable register offset.
 #define PIO_OWSR_OFF    0x000000A8  ///< PIO output write status register offset.
 /*\}*/
 
-/** Single PIO Register Addresses */
-/*\{*/
-#if defined(PIO_BASE)
-	#define PIO_ACCESS(offset) (*((reg32_t *)(PIO_BASE + (offset))))
 
-	#define PIO_PER     PIO_ACCESS(PIO_PER_OFF)     ///< PIO enable register address.
-	#define PIO_PDR     PIO_ACCESS(PIO_PDR_OFF)     ///< PIO disable register address.
-	#define PIO_PSR     PIO_ACCESS(PIO_PSR_OFF)     ///< PIO status register address.
-	#define PIO_OER     PIO_ACCESS(PIO_OER_OFF)     ///< Output enable register address.
-	#define PIO_ODR     PIO_ACCESS(PIO_ODR_OFF)     ///< Output disable register address.
-	#define PIO_OSR     PIO_ACCESS(PIO_OSR_OFF)     ///< Output status register address.
-	#define PIO_IFER    PIO_ACCESS(PIO_IFER_OFF)    ///< Input filter enable register address.
-	#define PIO_IFDR    PIO_ACCESS(PIO_IFDR_OFF)    ///< Input filter disable register address.
-	#define PIO_IFSR    PIO_ACCESS(PIO_IFSR_OFF)    ///< Input filter status register address.
-	#define PIO_SODR    PIO_ACCESS(PIO_SODR_OFF)    ///< Set output data register address.
-	#define PIO_CODR    PIO_ACCESS(PIO_CODR_OFF)    ///< Clear output data register address.
-	#define PIO_ODSR    PIO_ACCESS(PIO_ODSR_OFF)    ///< Output data status register address.
-	#define PIO_PDSR    PIO_ACCESS(PIO_PDSR_OFF)    ///< Pin data status register address.
-	#define PIO_IER     PIO_ACCESS(PIO_IER_OFF)     ///< Interrupt enable register address.
-	#define PIO_IDR     PIO_ACCESS(PIO_IDR_OFF)     ///< Interrupt disable register address.
-	#define PIO_IMR     PIO_ACCESS(PIO_IMR_OFF)     ///< Interrupt mask register address.
-	#define PIO_ISR     PIO_ACCESS(PIO_ISR_OFF)     ///< Interrupt status register address.
-	#define PIO_MDER    PIO_ACCESS(PIO_MDER_OFF)    ///< Multi-driver enable register address.
-	#define PIO_MDDR    PIO_ACCESS(PIO_MDDR_OFF)    ///< Multi-driver disable register address.
-	#define PIO_MDSR    PIO_ACCESS(PIO_MDSR_OFF)    ///< Multi-driver status register address.
-	#define PIO_PUDR    PIO_ACCESS(PIO_PUDR_OFF)    ///< Pull-up disable register address.
-	#define PIO_PUER    PIO_ACCESS(PIO_PUER_OFF)    ///< Pull-up enable register address.
-	#define PIO_PUSR    PIO_ACCESS(PIO_PUSR_OFF)    ///< Pull-up status register address.
-	#define PIO_ABCDSR1 PIO_ACCESS(PIO_ABCDSR1_OFF) ///< PIO peripheral select register 1 address.
-	#define PIO_ABCDSR2 PIO_ACCESS(PIO_ABCDSR2_OFF) ///< PIO peripheral select register 2 address.
-	#define PIO_OWER    PIO_ACCESS(PIO_OWER_OFF)    ///< PIO output write enable register address.
-	#define PIO_OWDR    PIO_ACCESS(PIO_OWDR_OFF)    ///< PIO output write disable register address.
-	#define PIO_OWSR    PIO_ACCESS(PIO_OWSR_OFF)    ///< PIO output write status register address.
-#endif /* PIO_BASE */
-/*\}*/
-
-/** PIO A Register Addresses */
-/*\{*/
 #if defined(PIOA_BASE)
+	/** PIO A Register Addresses */
+	/*\{*/
 	#define PIOA_ACCESS(offset) (*((reg32_t *)(PIOA_BASE + (offset))))
 
 	#define PIOA_PER      PIOA_ACCESS(PIO_PER_OFF)       ///< PIO enable register address.
@@ -177,17 +154,21 @@
 	#define PIOA_PUDR     PIOA_ACCESS(PIO_PUDR_OFF)      ///< Pull-up disable register address.
 	#define PIOA_PUER     PIOA_ACCESS(PIO_PUER_OFF)      ///< Pull-up enable register address.
 	#define PIOA_PUSR     PIOA_ACCESS(PIO_PUSR_OFF)      ///< Pull-up status register address.
+#ifdef PIO_ABSR_OFF
+	#define PIOA_ABSR     PIOA_ACCESS(PIO_ABSR_OFF)      ///< PIO peripheral select register address.
+#else
 	#define PIOA_ABCDSR1  PIOA_ACCESS(PIO_ABCDSR1_OFF)   ///< PIO peripheral select register 1 address.
 	#define PIOA_ABCDSR2  PIOA_ACCESS(PIO_ABCDSR2_OFF)   ///< PIO peripheral select register 2 address.
+#endif
 	#define PIOA_OWER     PIOA_ACCESS(PIO_OWER_OFF)      ///< PIO output write enable register address.
 	#define PIOA_OWDR     PIOA_ACCESS(PIO_OWDR_OFF)      ///< PIO output write disable register address.
 	#define PIOA_OWSR     PIOA_ACCESS(PIO_OWSR_OFF)      ///< PIO output write status register address.
+	/*\}*/
 #endif /* PIOA_BASE */
-/*\}*/
 
-/** PIO B Register Addresses */
-/*\{*/
 #if defined(PIOB_BASE)
+	/** PIO B Register Addresses */
+	/*\{*/
 	#define PIOB_ACCESS(offset) (*((reg32_t *)(PIOB_BASE + (offset))))
 
 	#define PIOB_PER      PIOB_ACCESS(PIO_PER_OFF)       ///< PIO enable register address.
@@ -213,17 +194,21 @@
 	#define PIOB_PUDR     PIOB_ACCESS(PIO_PUDR_OFF)      ///< Pull-up disable register address.
 	#define PIOB_PUER     PIOB_ACCESS(PIO_PUER_OFF)      ///< Pull-up enable register address.
 	#define PIOB_PUSR     PIOB_ACCESS(PIO_PUSR_OFF)      ///< Pull-up status register address.
+#ifdef PIO_ABSR_OFF
+	#define PIOB_ABSR     PIOB_ACCESS(PIO_ABSR_OFF)      ///< PIO peripheral select register address.
+#else
 	#define PIOB_ABCDSR1  PIOB_ACCESS(PIO_ABCDSR1_OFF)   ///< PIO peripheral select register 1 address.
 	#define PIOB_ABCDSR2  PIOB_ACCESS(PIO_ABCDSR2_OFF)   ///< PIO peripheral select register 2 address.
+#endif
 	#define PIOB_OWER     PIOB_ACCESS(PIO_OWER_OFF)      ///< PIO output write enable register address.
 	#define PIOB_OWDR     PIOB_ACCESS(PIO_OWDR_OFF)      ///< PIO output write disable register address.
 	#define PIOB_OWSR     PIOB_ACCESS(PIO_OWSR_OFF)      ///< PIO output write status register address.
+	/*\}*/
 #endif /* PIOB_BASE */
-/*\}*/
 
-/** PIO C Register Addresses */
-/*\{*/
 #if defined(PIOC_BASE)
+	/** PIO C Register Addresses */
+	/*\{*/
 	#define PIOC_ACCESS(offset) (*((reg32_t *)(PIOC_BASE + (offset))))
 
 	#define PIOC_PER      PIOC_ACCESS(PIO_PER_OFF)       ///< PIO enable register address.
@@ -249,12 +234,169 @@
 	#define PIOC_PUDR     PIOC_ACCESS(PIO_PUDR_OFF)      ///< Pull-up disable register address.
 	#define PIOC_PUER     PIOC_ACCESS(PIO_PUER_OFF)      ///< Pull-up enable register address.
 	#define PIOC_PUSR     PIOC_ACCESS(PIO_PUSR_OFF)      ///< Pull-up status register address.
+#ifdef PIO_ABSR_OFF
+	#define PIOC_ABSR     PIOC_ACCESS(PIO_ABSR_OFF)      ///< PIO peripheral select register address.
+#else
 	#define PIOC_ABCDSR1  PIOC_ACCESS(PIO_ABCDSR1_OFF)   ///< PIO peripheral select register 1 address.
 	#define PIOC_ABCDSR2  PIOC_ACCESS(PIO_ABCDSR2_OFF)   ///< PIO peripheral select register 2 address.
+#endif
 	#define PIOC_OWER     PIOC_ACCESS(PIO_OWER_OFF)      ///< PIO output write enable register address.
 	#define PIOC_OWDR     PIOC_ACCESS(PIO_OWDR_OFF)      ///< PIO output write disable register address.
 	#define PIOC_OWSR     PIOC_ACCESS(PIO_OWSR_OFF)      ///< PIO output write status register address.
+	/*\}*/
 #endif /* PIOC_BASE */
-/*\}*/
+
+#if defined(PIOD_BASE)
+	/** PIO C Register Addresses */
+	/*\{*/
+	#define PIOD_ACCESS(offset) (*((reg32_t *)(PIOD_BASE + (offset))))
+
+	#define PIOD_PER      PIOD_ACCESS(PIO_PER_OFF)       ///< PIO enable register address.
+	#define PIOD_PDR      PIOD_ACCESS(PIO_PDR_OFF)       ///< PIO disable register address.
+	#define PIOD_PSR      PIOD_ACCESS(PIO_PSR_OFF)       ///< PIO status register address.
+	#define PIOD_OER      PIOD_ACCESS(PIO_OER_OFF)       ///< Output enable register address.
+	#define PIOD_ODR      PIOD_ACCESS(PIO_ODR_OFF)       ///< Output disable register address.
+	#define PIOD_OSR      PIOD_ACCESS(PIO_OSR_OFF)       ///< Output status register address.
+	#define PIOD_IFER     PIOD_ACCESS(PIO_IFER_OFF)      ///< Input filter enable register address.
+	#define PIOD_IFDR     PIOD_ACCESS(PIO_IFDR_OFF)      ///< Input filter disable register address.
+	#define PIOD_IFSR     PIOD_ACCESS(PIO_IFSR_OFF)      ///< Input filter status register address.
+	#define PIOD_SODR     PIOD_ACCESS(PIO_SODR_OFF)      ///< Set output data register address.
+	#define PIOD_CODR     PIOD_ACCESS(PIO_CODR_OFF)      ///< Clear output data register address.
+	#define PIOD_ODSR     PIOD_ACCESS(PIO_ODSR_OFF)      ///< Output data status register address.
+	#define PIOD_PDSR     PIOD_ACCESS(PIO_PDSR_OFF)      ///< Pin data status register address.
+	#define PIOD_IER      PIOD_ACCESS(PIO_IER_OFF)       ///< Interrupt enable register address.
+	#define PIOD_IDR      PIOD_ACCESS(PIO_IDR_OFF)       ///< Interrupt disable register address.
+	#define PIOD_IMR      PIOD_ACCESS(PIO_IMR_OFF)       ///< Interrupt mask register address.
+	#define PIOD_ISR      PIOD_ACCESS(PIO_ISR_OFF)       ///< Interrupt status register address.
+	#define PIOD_MDER     PIOD_ACCESS(PIO_MDER_OFF)      ///< Multi-driver enable register address.
+	#define PIOD_MDDR     PIOD_ACCESS(PIO_MDDR_OFF)      ///< Multi-driver disable register address.
+	#define PIOD_MDSR     PIOD_ACCESS(PIO_MDSR_OFF)      ///< Multi-driver status register address.
+	#define PIOD_PUDR     PIOD_ACCESS(PIO_PUDR_OFF)      ///< Pull-up disable register address.
+	#define PIOD_PUER     PIOD_ACCESS(PIO_PUER_OFF)      ///< Pull-up enable register address.
+	#define PIOD_PUSR     PIOD_ACCESS(PIO_PUSR_OFF)      ///< Pull-up status register address.
+#ifdef PIO_ABSR_OFF
+	#define PIOD_ABSR     PIOD_ACCESS(PIO_ABSR_OFF)      ///< PIO peripheral select register address.
+#else
+	#define PIOD_ABCDSR1  PIOD_ACCESS(PIO_ABCDSR1_OFF)   ///< PIO peripheral select register 1 address.
+	#define PIOD_ABCDSR2  PIOD_ACCESS(PIO_ABCDSR2_OFF)   ///< PIO peripheral select register 2 address.
+#endif
+	#define PIOD_OWER     PIOD_ACCESS(PIO_OWER_OFF)      ///< PIO output write enable register address.
+	#define PIOD_OWDR     PIOD_ACCESS(PIO_OWDR_OFF)      ///< PIO output write disable register address.
+	#define PIOD_OWSR     PIOD_ACCESS(PIO_OWSR_OFF)      ///< PIO output write status register address.
+	/*\}*/
+#endif /* PIOD_BASE */
+
+#if defined(PIOE_BASE)
+	/** PIO C Register Addresses */
+	/*\{*/
+	#define PIOE_ACCESS(offset) (*((reg32_t *)(PIOE_BASE + (offset))))
+
+	#define PIOE_PER      PIOE_ACCESS(PIO_PER_OFF)       ///< PIO enable register address.
+	#define PIOE_PDR      PIOE_ACCESS(PIO_PDR_OFF)       ///< PIO disable register address.
+	#define PIOE_PSR      PIOE_ACCESS(PIO_PSR_OFF)       ///< PIO status register address.
+	#define PIOE_OER      PIOE_ACCESS(PIO_OER_OFF)       ///< Output enable register address.
+	#define PIOE_ODR      PIOE_ACCESS(PIO_ODR_OFF)       ///< Output disable register address.
+	#define PIOE_OSR      PIOE_ACCESS(PIO_OSR_OFF)       ///< Output status register address.
+	#define PIOE_IFER     PIOE_ACCESS(PIO_IFER_OFF)      ///< Input filter enable register address.
+	#define PIOE_IFDR     PIOE_ACCESS(PIO_IFDR_OFF)      ///< Input filter disable register address.
+	#define PIOE_IFSR     PIOE_ACCESS(PIO_IFSR_OFF)      ///< Input filter status register address.
+	#define PIOE_SODR     PIOE_ACCESS(PIO_SODR_OFF)      ///< Set output data register address.
+	#define PIOE_CODR     PIOE_ACCESS(PIO_CODR_OFF)      ///< Clear output data register address.
+	#define PIOE_ODSR     PIOE_ACCESS(PIO_ODSR_OFF)      ///< Output data status register address.
+	#define PIOE_PDSR     PIOE_ACCESS(PIO_PDSR_OFF)      ///< Pin data status register address.
+	#define PIOE_IER      PIOE_ACCESS(PIO_IER_OFF)       ///< Interrupt enable register address.
+	#define PIOE_IDR      PIOE_ACCESS(PIO_IDR_OFF)       ///< Interrupt disable register address.
+	#define PIOE_IMR      PIOE_ACCESS(PIO_IMR_OFF)       ///< Interrupt mask register address.
+	#define PIOE_ISR      PIOE_ACCESS(PIO_ISR_OFF)       ///< Interrupt status register address.
+	#define PIOE_MDER     PIOE_ACCESS(PIO_MDER_OFF)      ///< Multi-driver enable register address.
+	#define PIOE_MDDR     PIOE_ACCESS(PIO_MDDR_OFF)      ///< Multi-driver disable register address.
+	#define PIOE_MDSR     PIOE_ACCESS(PIO_MDSR_OFF)      ///< Multi-driver status register address.
+	#define PIOE_PUDR     PIOE_ACCESS(PIO_PUDR_OFF)      ///< Pull-up disable register address.
+	#define PIOE_PUER     PIOE_ACCESS(PIO_PUER_OFF)      ///< Pull-up enable register address.
+	#define PIOE_PUSR     PIOE_ACCESS(PIO_PUSR_OFF)      ///< Pull-up status register address.
+#ifdef PIO_ABSR_OFF
+	#define PIOE_ABSR     PIOE_ACCESS(PIO_ABSR_OFF)      ///< PIO peripheral select register address.
+#else
+	#define PIOE_ABCDSR1  PIOE_ACCESS(PIO_ABCDSR1_OFF)   ///< PIO peripheral select register 1 address.
+	#define PIOE_ABCDSR2  PIOE_ACCESS(PIO_ABCDSR2_OFF)   ///< PIO peripheral select register 2 address.
+#endif
+	#define PIOE_OWER     PIOE_ACCESS(PIO_OWER_OFF)      ///< PIO output write enable register address.
+	#define PIOE_OWDR     PIOE_ACCESS(PIO_OWDR_OFF)      ///< PIO output write disable register address.
+	#define PIOE_OWSR     PIOE_ACCESS(PIO_OWSR_OFF)      ///< PIO output write status register address.
+	/*\}*/
+#endif /* PIOE_BASE */
+
+#if defined(PIOF_BASE)
+	/** PIO C Register Addresses */
+	/*\{*/
+	#define PIOF_ACCESS(offset) (*((reg32_t *)(PIOF_BASE + (offset))))
+
+	#define PIOF_PER      PIOF_ACCESS(PIO_PER_OFF)       ///< PIO enable register address.
+	#define PIOF_PDR      PIOF_ACCESS(PIO_PDR_OFF)       ///< PIO disable register address.
+	#define PIOF_PSR      PIOF_ACCESS(PIO_PSR_OFF)       ///< PIO status register address.
+	#define PIOF_OER      PIOF_ACCESS(PIO_OER_OFF)       ///< Output enable register address.
+	#define PIOF_ODR      PIOF_ACCESS(PIO_ODR_OFF)       ///< Output disable register address.
+	#define PIOF_OSR      PIOF_ACCESS(PIO_OSR_OFF)       ///< Output status register address.
+	#define PIOF_IFER     PIOF_ACCESS(PIO_IFER_OFF)      ///< Input filter enable register address.
+	#define PIOF_IFDR     PIOF_ACCESS(PIO_IFDR_OFF)      ///< Input filter disable register address.
+	#define PIOF_IFSR     PIOF_ACCESS(PIO_IFSR_OFF)      ///< Input filter status register address.
+	#define PIOF_SODR     PIOF_ACCESS(PIO_SODR_OFF)      ///< Set output data register address.
+	#define PIOF_CODR     PIOF_ACCESS(PIO_CODR_OFF)      ///< Clear output data register address.
+	#define PIOF_ODSR     PIOF_ACCESS(PIO_ODSR_OFF)      ///< Output data status register address.
+	#define PIOF_PDSR     PIOF_ACCESS(PIO_PDSR_OFF)      ///< Pin data status register address.
+	#define PIOF_IER      PIOF_ACCESS(PIO_IER_OFF)       ///< Interrupt enable register address.
+	#define PIOF_IDR      PIOF_ACCESS(PIO_IDR_OFF)       ///< Interrupt disable register address.
+	#define PIOF_IMR      PIOF_ACCESS(PIO_IMR_OFF)       ///< Interrupt mask register address.
+	#define PIOF_ISR      PIOF_ACCESS(PIO_ISR_OFF)       ///< Interrupt status register address.
+	#define PIOF_MDER     PIOF_ACCESS(PIO_MDER_OFF)      ///< Multi-driver enable register address.
+	#define PIOF_MDDR     PIOF_ACCESS(PIO_MDDR_OFF)      ///< Multi-driver disable register address.
+	#define PIOF_MDSR     PIOF_ACCESS(PIO_MDSR_OFF)      ///< Multi-driver status register address.
+	#define PIOF_PUDR     PIOF_ACCESS(PIO_PUDR_OFF)      ///< Pull-up disable register address.
+	#define PIOF_PUER     PIOF_ACCESS(PIO_PUER_OFF)      ///< Pull-up enable register address.
+	#define PIOF_PUSR     PIOF_ACCESS(PIO_PUSR_OFF)      ///< Pull-up status register address.
+#ifdef PIO_ABSR_OFF
+	#define PIOF_ABSR     PIOF_ACCESS(PIO_ABSR_OFF)      ///< PIO peripheral select register address.
+#else
+	#define PIOF_ABCDSR1  PIOF_ACCESS(PIO_ABCDSR1_OFF)   ///< PIO peripheral select register 1 address.
+	#define PIOF_ABCDSR2  PIOF_ACCESS(PIO_ABCDSR2_OFF)   ///< PIO peripheral select register 2 address.
+#endif
+	#define PIOF_OWER     PIOF_ACCESS(PIO_OWER_OFF)      ///< PIO output write enable register address.
+	#define PIOF_OWDR     PIOF_ACCESS(PIO_OWDR_OFF)      ///< PIO output write disable register address.
+	#define PIOF_OWSR     PIOF_ACCESS(PIO_OWSR_OFF)      ///< PIO output write status register address.
+	/*\}*/
+#endif /* PIOF_BASE */
+
+
+#define PIO_PERIPH_A  0
+#define PIO_PERIPH_B  1
+#ifdef PIO_ABCDSR1_OFF
+	#define PIO_PERIPH_C  2
+	#define PIO_PERIPH_D  3
+#endif
+
+/**
+ * Set peripheral on I/O ports.
+ *
+ * \param  base      PIO port base
+ * \param  mask      mask of I/O pin to manipulate
+ * \param  function  function to assign to selected pins (PIO_PERIPH_A, B, ...)
+ */
+#ifdef PIO_ABCDSR1_OFF
+	#define PIO_PERIPH_SEL(base, mask, function) do { \
+		HWREG((base) + PIO_ABCDSR1_OFF) &= ~(mask); \
+		HWREG((base) + PIO_ABCDSR2_OFF) &= ~(mask); \
+		if ((function) & 1) \
+			HWREG((base) + PIO_ABCDSR1_OFF) |= (mask); \
+		if ((function) & 2) \
+			HWREG((base) + PIO_ABCDSR2_OFF) |= (mask); \
+	} while (0)
+#else
+	#define PIO_PERIPH_SEL(base, mask, function) do { \
+		HWREG((base) + PIO_ABSR_OFF) &= ~(mask); \
+		if ((function) & 1) \
+			HWREG((base) + PIO_ABSR_OFF) |= (mask); \
+	} while (0)
+#endif
+
 
 #endif /* SAM3_PIO_H */

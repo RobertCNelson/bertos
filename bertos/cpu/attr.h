@@ -144,7 +144,7 @@
 			 * to get them transparently copied to SRAM for zero-wait-state
 			 * operation.
 			 */
-			#define FAST_FUNC __attribute__((section(".data")))
+			#define FAST_FUNC __attribute__((section(".ramfunc")))
 
 			/**
 			 * Data attribute to move constant data to fast memory storage.
@@ -161,7 +161,7 @@
 		/*
 		 * Function attribute to move it into ram memory.
 		 */
-		#define RAM_FUNC __attribute__((section(".data")))
+		#define RAM_FUNC __attribute__((section(".ramfunc")))
 
 	#endif /* !__IAR_SYSTEMS_ICC_ */
 #elif CPU_CM3
@@ -171,24 +171,41 @@
 	#define CPU_HARVARD            0
 
 	/// Valid pointers should be >= than this value (used for debug)
-	#if (CPU_CM3_LM3S1968 || CPU_CM3_LM3S8962 || CPU_CM3_STM32F103RB || CPU_CM3_SAM3)
+	#if (CPU_CM3_LM3S1968 || CPU_CM3_LM3S8962 || CPU_CM3_STM32 || CPU_CM3_SAM3)
 		#define CPU_RAM_START 0x20000000
 	#else
 		#warning Fix CPU_RAM_START address for your Cortex-M3, default value set to 0x20000000
 		#define CPU_RAM_START 0x20000000
 	#endif
 
-	#if defined(__ARMEB__)
-		#define CPU_BYTE_ORDER CPU_BIG_ENDIAN
-	#elif defined(__ARMEL__)
-		#define CPU_BYTE_ORDER CPU_LITTLE_ENDIAN
-	#else
-		#error Unable to detect Cortex-M3 endianess!
-	#endif
+    #if defined( __ICCARM__)
+        #if ((defined __LITTLE_ENDIAN__) && (__LITTLE_ENDIAN__ == 0))
+            #define CPU_BYTE_ORDER CPU_BIG_ENDIAN
+        #elif ((defined __LITTLE_ENDIAN__) && (__LITTLE_ENDIAN__ == 1))
+		    #define CPU_BYTE_ORDER CPU_LITTLE_ENDIAN
+        #else
+            #error Unable to detect Cortex-M3 endianess!
+        #endif
+
+	#define NOP            __no_operation()
+    #else
+        #if defined(__ARMEB__) // GCC
+            #define CPU_BYTE_ORDER CPU_BIG_ENDIAN
+        #elif defined(__ARMEL__) // GCC
+            #define CPU_BYTE_ORDER CPU_LITTLE_ENDIAN
+        #else
+            #error Unable to detect Cortex-M3 endianess!
+        #endif
 
 	#define NOP         asm volatile ("nop")
 	#define PAUSE       asm volatile ("wfi" ::: "memory")
 	#define BREAKPOINT  /* asm("bkpt 0") DOES NOT WORK */
+
+	/*
+	 * Function attribute to move it into ram memory.
+	 */
+	#define RAM_FUNC __attribute__((section(".ramfunc")))
+    #endif
 
 #elif CPU_PPC
 
@@ -210,7 +227,7 @@
 	#define CPU_REG_BITS            16
 	#define CPU_REGS_CNT            FIXME
 	#define CPU_BYTE_ORDER          CPU_BIG_ENDIAN
-	#define CPU_HARVARD		1
+	#define CPU_HARVARD             1
 
 	/* Memory is word-addessed in the DSP56K */
 	#define CPU_BITS_PER_CHAR  16
@@ -239,8 +256,10 @@
 		#define CPU_RAM_START       0x60
 	#elif CPU_AVR_ATMEGA64 || CPU_AVR_ATMEGA128 || CPU_AVR_ATMEGA168 || CPU_AVR_ATMEGA328P
 		#define CPU_RAM_START       0x100
-	#elif CPU_AVR_ATMEGA1281 || CPU_AVR_ATMEGA1280
+	#elif CPU_AVR_ATMEGA1281 || CPU_AVR_ATMEGA1280 || CPU_AVR_ATMEGA2560
 		#define CPU_RAM_START       0x200
+	#elif CPU_AVR_XMEGA_D
+		#define CPU_RAM_START		0x2000
 	#else
 		#warning Fix CPU_RAM_START address for your AVR, default value set to 0x100
 		#define CPU_RAM_START       0x100
@@ -254,7 +273,7 @@
 	#define CPU_HARVARD		        0
 
 	/// Valid pointers should be >= than this value (used for debug)
-	#define CPU_RAM_START     	    0x200
+	#define CPU_RAM_START           0x200
 
 	#define NOP                     __asm__ __volatile__ ("nop")
 
@@ -278,7 +297,7 @@
 
 #ifndef PAUSE
 	/// Generic PAUSE implementation.
-	#define PAUSE	{NOP; MEMORY_BARRIER;}
+	#define PAUSE	do {NOP; MEMORY_BARRIER;} while (0)
 #endif
 
 #endif /* CPU_ATTR_H */

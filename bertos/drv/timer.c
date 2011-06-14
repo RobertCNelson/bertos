@@ -158,6 +158,8 @@ INLINE void timer_addToList(Timer *timer, List *queue)
  * When the delay indicated by the timer expires, the timer
  * device will execute the event associated with it.
  *
+ * You should not call this function on an already running timer.
+ *
  * \note Interrupt safe
  */
 void timer_add(Timer *timer)
@@ -252,14 +254,13 @@ void timer_delayTicks(ticks_t delay)
 
 #if CONFIG_KERN_SIGNALS
 	Timer t;
-
+	DB(t.magic = TIMER_MAGIC_INACTIVE;)
 	if (proc_preemptAllowed())
 	{
-		ASSERT(!sig_check(SIG_SINGLE));
-		timer_setSignal(&t, proc_current(), SIG_SINGLE);
+		timer_setEvent(&t);
 		timer_setDelay(&t, delay);
 		timer_add(&t);
-		sig_wait(SIG_SINGLE);
+		timer_waitEvent(&t);
 	}
 	else
 #endif /* !CONFIG_KERN_SIGNALS */
@@ -286,15 +287,30 @@ void timer_busyWait(hptime_t delay)
 	hptime_t now, prev = timer_hw_hpread();
 	hptime_t delta;
 
-	for(;;)
+	for (;;)
 	{
 		now = timer_hw_hpread();
 		/*
-		 * We rely on hptime_t being unsigned here to
-		 * reduce the modulo to an AND in the common
-		 * case of TIMER_HW_CNT.
+		 * The timer counter may wrap here and "prev" can become
+		 * greater than "now". So, be sure to always evaluate a
+		 * coherent timer difference:
+		 *
+		 * 0     prev            now   TIMER_HW_CNT
+		 * |_____|_______________|_____|
+		 *        ^^^^^^^^^^^^^^^
+		 * delta = now - prev
+		 *
+		 * 0     now             prev  TIMER_HW_CNT
+		 * |_____|_______________|_____|
+		 *  ^^^^^                 ^^^^^
+		 * delta = (TIMER_HW_CNT - prev) + now
+		 *
+		 * NOTE: TIMER_HW_CNT can be any value, not necessarily a power
+		 * of 2. For this reason the "%" operator is not suitable for
+		 * the generic case.
 		 */
-		delta = (now - prev) % TIMER_HW_CNT;
+		delta = (now < prev) ? ((hptime_t)TIMER_HW_CNT - prev + now) :
+						(now - prev);
 		if (delta >= delay)
 			break;
 		delay -= delta;

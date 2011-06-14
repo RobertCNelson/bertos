@@ -36,14 +36,17 @@
  * \author Luca Ottaviano <lottaviano@develer.com>
  */
 
-#include "cfg/cfg_spi_dma.h"
+#include <drv/spi_dma.h>
 
-#include "spi_dma_at91.h"
+#include "cfg/cfg_spi_dma.h"
 #include "hw/hw_spi_dma.h"
 
+#include <io/at91sam7.h>
 #include <io/kfile.h>
+
 #include <struct/fifobuf.h>
 #include <struct/kfile_fifo.h>
+
 #include <drv/timer.h>
 
 #include <cpu/attr.h>
@@ -129,7 +132,7 @@ static size_t spi_dma_read(UNUSED_ARG(struct KFile *, fd), void *_buf, size_t si
 
 #define SPI_DMA_IRQ_PRIORITY 4
 
-void spi_dma_init(SpiDmaAt91 *spi)
+void spi_dma_init(SpiDma *spi)
 {
 	/* Disable PIO on SPI pins */
 	PIOA_PDR = BV(SPI0_SPCK) | BV(SPI0_MOSI) | BV(SPI0_MISO);
@@ -158,7 +161,7 @@ void spi_dma_init(SpiDmaAt91 *spi)
 	/* Enable SPI */
 	SPI0_CR = BV(SPI_SPIEN);
 
-	DB(spi->fd._type = KFT_SPIDMAAT91);
+	DB(spi->fd._type = KFT_SPIDMA);
 	spi->fd.write = spi_dma_write;
 	spi->fd.read = spi_dma_read;
 	spi->fd.flush = spi_dma_flush;
