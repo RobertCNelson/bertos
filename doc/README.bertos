@@ -40,8 +40,6 @@ designed for fine-grained modularity and minimal external dependencies.
 Most non-essential features can be configured out for applications with small
 memory footprint requirements.
 
-The basic design principles are explained in the \ref oop page.
-
 \section features Features
 
   - multitasking kernel with IPC, semaphores, priority levels;
