@@ -9,7 +9,8 @@ sam3x-ek_tcp_server_DEBUG = 1
 # Our target application
 TRG += sam3x-ek_tcp_server
 
-sam3x-ek_tcp_server_PREFIX = "arm-none-eabi-"
+#sam3x-ek_tcp_server_PREFIX = "arm-none-eabi-"
+sam3x-ek_tcp_server_PREFIX = ""
 
 sam3x-ek_tcp_server_SUFFIX = ""
 
